@@ -15,14 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Plus, Pencil, Trash2, Server, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
@@ -124,9 +117,7 @@ export function SmtpConfigSection() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">SMTP Servers</h2>
-          <p className="text-sm text-muted-foreground">
-            Configure your email sending servers
-          </p>
+          <p className="text-sm text-muted-foreground">Configure your email sending servers</p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="mr-2 size-4" />
@@ -175,12 +166,22 @@ export function SmtpConfigSection() {
                     <TableCell className="font-mono text-xs">{config.username}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" aria-label="Edit SMTP config" onClick={() => openEdit(config)}>
-                            <Pencil className="size-4" />
-                          </Button>
-                        <Button variant="ghost" size="icon" aria-label="Delete SMTP config" onClick={() => handleDelete(config.id!)}>
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Edit SMTP config"
+                          onClick={() => openEdit(config)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Delete SMTP config"
+                          onClick={() => handleDelete(config.id!)}
+                        >
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -261,9 +262,7 @@ export function SmtpConfigSection() {
             <Button variant="outline" onClick={handleTest} disabled={testing || !form.host}>
               {testing ? "Testing..." : "Test Connection"}
             </Button>
-            <Button onClick={handleSave}>
-              {editingId ? "Update" : "Create"}
-            </Button>
+            <Button onClick={handleSave}>{editingId ? "Update" : "Create"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

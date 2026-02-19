@@ -15,21 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Pencil, Trash2, Mail } from "lucide-react"
 import { toast } from "sonner"
 
@@ -60,7 +47,8 @@ export function SenderSection() {
   }, [])
 
   useEffect(() => {
-    load()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load from IndexedDB
+    void load()
   }, [load])
 
   function openCreate() {
@@ -119,9 +107,7 @@ export function SenderSection() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">Senders</h2>
-          <p className="text-sm text-muted-foreground">
-            Create sender identities with custom signatures
-          </p>
+          <p className="text-sm text-muted-foreground">Create sender identities with custom signatures</p>
         </div>
         <Button onClick={openCreate} disabled={smtpConfigs.length === 0}>
           <Plus className="mr-2 size-4" />
@@ -144,9 +130,7 @@ export function SenderSection() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Mail className="mb-4 size-12 text-muted-foreground/40" />
             <CardTitle className="mb-2 text-base">No senders configured</CardTitle>
-            <CardDescription>
-              Add a sender identity with name, email, and signature
-            </CardDescription>
+            <CardDescription>Add a sender identity with name, email, and signature</CardDescription>
           </CardContent>
         </Card>
       ) : (
@@ -175,7 +159,12 @@ export function SenderSection() {
                           <Button variant="ghost" size="icon" aria-label="Edit sender" onClick={() => openEdit(sender)}>
                             <Pencil className="size-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" aria-label="Delete sender" onClick={() => handleDelete(sender.id!)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Delete sender"
+                            onClick={() => handleDelete(sender.id!)}
+                          >
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
                         </div>
@@ -193,9 +182,7 @@ export function SenderSection() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit" : "New"} Sender</DialogTitle>
-            <DialogDescription>
-              Configure the sender identity that recipients will see
-            </DialogDescription>
+            <DialogDescription>Configure the sender identity that recipients will see</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-4">
@@ -279,7 +266,7 @@ export function SenderSection() {
               ) : (
                 <Textarea
                   id="sender-sig"
-                  placeholder={'<p>Best regards,<br/><strong>John</strong></p>'}
+                  placeholder={"<p>Best regards,<br/><strong>John</strong></p>"}
                   rows={5}
                   className="font-mono text-xs"
                   value={form.signature}
@@ -292,9 +279,7 @@ export function SenderSection() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSave}>
-              {editingId ? "Update" : "Create"}
-            </Button>
+            <Button onClick={handleSave}>{editingId ? "Update" : "Create"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

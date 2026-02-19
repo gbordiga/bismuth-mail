@@ -16,32 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  Users,
-  Upload,
-  ArrowLeft,
-  X,
-  Download,
-  UserPlus,
-} from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 
 // --- CSV Parser (simple, handles quotes) ---
@@ -121,7 +98,7 @@ export function EmailListSection() {
       all.map(async (list) => ({
         ...list,
         contactCount: await db.contacts.where("listId").equals(list.id!).count(),
-      }))
+      })),
     )
     setLists(withCounts)
   }, [])
@@ -132,12 +109,14 @@ export function EmailListSection() {
   }, [])
 
   useEffect(() => {
-    loadLists()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load from IndexedDB
+    void loadLists()
   }, [loadLists])
 
   useEffect(() => {
     if (selectedList) {
-      loadContacts(selectedList.id!)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reload contacts when list changes
+      void loadContacts(selectedList.id!)
     }
   }, [selectedList, loadContacts])
 
@@ -312,10 +291,7 @@ export function EmailListSection() {
     }
     const dataRows = csvData.slice(1)
 
-    const existingContacts = await db.contacts
-      .where("listId")
-      .equals(selectedList!.id!)
-      .toArray()
+    const existingContacts = await db.contacts.where("listId").equals(selectedList!.id!).toArray()
     const existingEmails = new Set(existingContacts.map((c) => c.email))
 
     const toAdd: Omit<Contact, "id">[] = []
@@ -366,9 +342,7 @@ export function EmailListSection() {
     if (!searchQuery) return true
     const q = searchQuery.toLowerCase()
     return (
-      c.email.toLowerCase().includes(q) ||
-      c.firstName.toLowerCase().includes(q) ||
-      c.lastName.toLowerCase().includes(q)
+      c.email.toLowerCase().includes(q) || c.firstName.toLowerCase().includes(q) || c.lastName.toLowerCase().includes(q)
     )
   })
 
@@ -379,9 +353,7 @@ export function EmailListSection() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">Email Lists</h2>
-            <p className="text-sm text-muted-foreground">
-              Manage your contact lists and custom fields
-            </p>
+            <p className="text-sm text-muted-foreground">Manage your contact lists and custom fields</p>
           </div>
           <Button onClick={openCreateList}>
             <Plus className="mr-2 size-4" />
@@ -458,9 +430,7 @@ export function EmailListSection() {
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>{editingListId ? "Edit" : "New"} List</DialogTitle>
-              <DialogDescription>
-                Define the list name and any custom fields for contacts
-              </DialogDescription>
+              <DialogDescription>Define the list name and any custom fields for contacts</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-2">
               <div className="grid gap-2">
@@ -525,9 +495,7 @@ export function EmailListSection() {
               <Button variant="outline" onClick={() => setListDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveList}>
-                {editingListId ? "Update" : "Create"}
-              </Button>
+              <Button onClick={handleSaveList}>{editingListId ? "Update" : "Create"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -557,13 +525,7 @@ export function EmailListSection() {
               </span>
             </Button>
           </label>
-          <input
-            id="csv-upload"
-            type="file"
-            accept=".csv,.txt"
-            className="hidden"
-            onChange={handleFileUpload}
-          />
+          <input id="csv-upload" type="file" accept=".csv,.txt" className="hidden" onChange={handleFileUpload} />
           <Button onClick={openCreateContact}>
             <UserPlus className="mr-2 size-4" />
             Add Contact
@@ -584,9 +546,7 @@ export function EmailListSection() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Download className="mb-4 size-12 text-muted-foreground/40" />
             <CardTitle className="mb-2 text-base">No contacts yet</CardTitle>
-            <CardDescription>
-              Add contacts manually or import from a CSV file
-            </CardDescription>
+            <CardDescription>Add contacts manually or import from a CSV file</CardDescription>
           </CardContent>
         </Card>
       ) : (
@@ -618,17 +578,31 @@ export function EmailListSection() {
                     ))}
                     <TableCell>
                       {contact.unsubscribed ? (
-                        <Badge variant="destructive" className="text-xs">Unsubscribed</Badge>
+                        <Badge variant="destructive" className="text-xs">
+                          Unsubscribed
+                        </Badge>
                       ) : (
-                        <Badge variant="secondary" className="bg-success/10 text-success text-xs">Active</Badge>
+                        <Badge variant="secondary" className="bg-success/10 text-success text-xs">
+                          Active
+                        </Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" aria-label="Edit contact" onClick={() => openEditContact(contact)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Edit contact"
+                          onClick={() => openEditContact(contact)}
+                        >
                           <Pencil className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" aria-label="Delete contact" onClick={() => handleDeleteContact(contact.id!)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Delete contact"
+                          onClick={() => handleDeleteContact(contact.id!)}
+                        >
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
                       </div>
@@ -646,9 +620,7 @@ export function EmailListSection() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingContactId ? "Edit" : "Add"} Contact</DialogTitle>
-            <DialogDescription>
-              Enter the contact details
-            </DialogDescription>
+            <DialogDescription>Enter the contact details</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">
@@ -699,9 +671,7 @@ export function EmailListSection() {
             <Button variant="outline" onClick={() => setContactDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSaveContact}>
-              {editingContactId ? "Update" : "Add"}
-            </Button>
+            <Button onClick={handleSaveContact}>{editingContactId ? "Update" : "Add"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -717,9 +687,7 @@ export function EmailListSection() {
           </DialogHeader>
           {csvData.length > 0 && (
             <div className="grid gap-4 py-2">
-              <p className="text-xs text-muted-foreground">
-                CSV Headers: {csvData[0].join(", ")}
-              </p>
+              <p className="text-xs text-muted-foreground">CSV Headers: {csvData[0].join(", ")}</p>
               <div className="grid gap-3">
                 <div className="grid grid-cols-2 items-center gap-4">
                   <Label>Email Column *</Label>
@@ -797,7 +765,9 @@ export function EmailListSection() {
                   <div key={cf.name} className="grid grid-cols-2 items-center gap-4">
                     <Label>{cf.name}</Label>
                     <Select
-                      value={csvMapping[`custom_${cf.name}`] !== undefined ? String(csvMapping[`custom_${cf.name}`]) : "none"}
+                      value={
+                        csvMapping[`custom_${cf.name}`] !== undefined ? String(csvMapping[`custom_${cf.name}`]) : "none"
+                      }
                       onValueChange={(v) => {
                         if (v === "none") {
                           const m = { ...csvMapping }
@@ -860,9 +830,7 @@ export function EmailListSection() {
             <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleImport}>
-              Import {csvData.length > 1 ? csvData.length - 1 : 0} Contacts
-            </Button>
+            <Button onClick={handleImport}>Import {csvData.length > 1 ? csvData.length - 1 : 0} Contacts</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

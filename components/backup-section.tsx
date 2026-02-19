@@ -38,15 +38,14 @@ export function BackupSection() {
   async function handleExport() {
     setExporting(true)
     try {
-      const [smtpConfigs, senders, emailLists, contacts, newsletters, sendLogs] =
-        await Promise.all([
-          db.smtpConfigs.toArray(),
-          db.senders.toArray(),
-          db.emailLists.toArray(),
-          db.contacts.toArray(),
-          db.newsletters.toArray(),
-          db.sendLogs.toArray(),
-        ])
+      const [smtpConfigs, senders, emailLists, contacts, newsletters, sendLogs] = await Promise.all([
+        db.smtpConfigs.toArray(),
+        db.senders.toArray(),
+        db.emailLists.toArray(),
+        db.contacts.toArray(),
+        db.newsletters.toArray(),
+        db.sendLogs.toArray(),
+      ])
 
       const backup: BackupData = {
         version: 1,
@@ -112,24 +111,28 @@ export function BackupSection() {
     setImporting(true)
 
     try {
-      await db.transaction("rw", [db.smtpConfigs, db.senders, db.emailLists, db.contacts, db.newsletters, db.sendLogs], async () => {
-        await Promise.all([
-          db.smtpConfigs.clear(),
-          db.senders.clear(),
-          db.emailLists.clear(),
-          db.contacts.clear(),
-          db.newsletters.clear(),
-          db.sendLogs.clear(),
-        ])
+      await db.transaction(
+        "rw",
+        [db.smtpConfigs, db.senders, db.emailLists, db.contacts, db.newsletters, db.sendLogs],
+        async () => {
+          await Promise.all([
+            db.smtpConfigs.clear(),
+            db.senders.clear(),
+            db.emailLists.clear(),
+            db.contacts.clear(),
+            db.newsletters.clear(),
+            db.sendLogs.clear(),
+          ])
 
-        // Preserve original IDs so foreign key references remain valid
-        await db.smtpConfigs.bulkAdd(importSummary.smtpConfigs as Parameters<typeof db.smtpConfigs.bulkAdd>[0])
-        await db.senders.bulkAdd(importSummary.senders as Parameters<typeof db.senders.bulkAdd>[0])
-        await db.emailLists.bulkAdd(importSummary.emailLists as Parameters<typeof db.emailLists.bulkAdd>[0])
-        await db.contacts.bulkAdd(importSummary.contacts as Parameters<typeof db.contacts.bulkAdd>[0])
-        await db.newsletters.bulkAdd(importSummary.newsletters as Parameters<typeof db.newsletters.bulkAdd>[0])
-        await db.sendLogs.bulkAdd(importSummary.sendLogs as Parameters<typeof db.sendLogs.bulkAdd>[0])
-      })
+          // Preserve original IDs so foreign key references remain valid
+          await db.smtpConfigs.bulkAdd(importSummary.smtpConfigs as Parameters<typeof db.smtpConfigs.bulkAdd>[0])
+          await db.senders.bulkAdd(importSummary.senders as Parameters<typeof db.senders.bulkAdd>[0])
+          await db.emailLists.bulkAdd(importSummary.emailLists as Parameters<typeof db.emailLists.bulkAdd>[0])
+          await db.contacts.bulkAdd(importSummary.contacts as Parameters<typeof db.contacts.bulkAdd>[0])
+          await db.newsletters.bulkAdd(importSummary.newsletters as Parameters<typeof db.newsletters.bulkAdd>[0])
+          await db.sendLogs.bulkAdd(importSummary.sendLogs as Parameters<typeof db.sendLogs.bulkAdd>[0])
+        },
+      )
 
       toast.success("Backup imported successfully! Reload the page to see all data.")
       setPendingFile(null)
@@ -191,19 +194,8 @@ export function BackupSection() {
                 Restore all data from a previously exported JSON file. This will replace all current data.
               </CardDescription>
             </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-            <Button
-              variant="outline"
-              onClick={() => fileRef.current?.click()}
-              disabled={importing}
-              className="w-full"
-            >
+            <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleFileSelect} />
+            <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={importing} className="w-full">
               {importing ? (
                 <>
                   <Loader2 className="mr-2 size-4 animate-spin" />
@@ -228,9 +220,9 @@ export function BackupSection() {
             <div>
               <p className="text-sm font-medium text-foreground">About data storage</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                All your data is stored locally in your browser using IndexedDB. Data does not leave your device
-                unless you explicitly send emails. Use the export feature to create backups before clearing
-                browser data or switching devices.
+                All your data is stored locally in your browser using IndexedDB. Data does not leave your device unless
+                you explicitly send emails. Use the export feature to create backups before clearing browser data or
+                switching devices.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Badge variant="outline">SMTP Configs</Badge>
@@ -254,7 +246,8 @@ export function BackupSection() {
               Confirm Import
             </DialogTitle>
             <DialogDescription>
-              This will <strong>replace all existing data</strong> with the backup contents. This action cannot be undone.
+              This will <strong>replace all existing data</strong> with the backup contents. This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
 

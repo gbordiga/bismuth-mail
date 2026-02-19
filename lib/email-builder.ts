@@ -26,8 +26,16 @@ export function blockToHtml(block: EditorBlock, preview = false): string {
   }
 }
 
-export function buildFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeHref: string, preview = false): string {
-  const body = blocks.map((b) => blockToHtml(b, preview)).filter(Boolean).join("\n")
+export function buildFullHtml(
+  blocks: EditorBlock[],
+  senderSig: string,
+  unsubscribeHref: string,
+  preview = false,
+): string {
+  const body = blocks
+    .map((b) => blockToHtml(b, preview))
+    .filter(Boolean)
+    .join("\n")
   return `<!DOCTYPE html>
 <html>
 <head>

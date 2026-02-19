@@ -3,18 +3,7 @@
 import { useState } from "react"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
-import {
-  Mail,
-  Server,
-  Users,
-  FileEdit,
-  Send,
-  Menu,
-  X,
-  DatabaseBackup,
-  Sun,
-  Moon,
-} from "lucide-react"
+import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const navItems = [
@@ -42,17 +31,14 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Mobile overlay */}
       {mobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-foreground/20 lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
+        <div className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
 
       {/* Sidebar */}
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-card transition-transform duration-200 lg:static lg:translate-x-0",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
+          mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex h-14 items-center gap-3 border-b px-5">
@@ -86,7 +72,7 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
                       "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                       isActive
                         ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
                     )}
                   >
                     <Icon className="size-4 shrink-0" />
@@ -98,9 +84,7 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
           </ul>
         </nav>
         <div className="border-t p-4 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
-            Stored locally in IndexedDB
-          </p>
+          <p className="text-xs text-muted-foreground">Stored locally in IndexedDB</p>
           <Button
             variant="ghost"
             size="icon"
@@ -130,9 +114,7 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
             {navItems.find((n) => n.id === activeSection)?.label}
           </h1>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          {children}
-        </main>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
       </div>
     </div>
   )

@@ -16,21 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Plus,
   Pencil,
@@ -139,7 +126,9 @@ function BlockEditor({
         <div
           key={block.id}
           className={`group relative rounded-lg border transition-colors ${
-            activeBlockId === block.id ? "border-primary ring-1 ring-primary/20" : "border-border hover:border-muted-foreground/30"
+            activeBlockId === block.id
+              ? "border-primary ring-1 ring-primary/20"
+              : "border-border hover:border-muted-foreground/30"
           }`}
           onClick={() => setActiveBlockId(block.id)}
         >
@@ -168,13 +157,30 @@ function BlockEditor({
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Button variant="ghost" size="icon" className="size-6" onClick={() => moveBlock(block.id, -1)} disabled={idx === 0}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              onClick={() => moveBlock(block.id, -1)}
+              disabled={idx === 0}
+            >
               <ArrowUp className="size-3" />
             </Button>
-            <Button variant="ghost" size="icon" className="size-6" onClick={() => moveBlock(block.id, 1)} disabled={idx === blocks.length - 1}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              onClick={() => moveBlock(block.id, 1)}
+              disabled={idx === blocks.length - 1}
+            >
               <ArrowDown className="size-3" />
             </Button>
-            <Button variant="ghost" size="icon" className="size-6 text-destructive" onClick={() => removeBlock(block.id)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 text-destructive"
+              onClick={() => removeBlock(block.id)}
+            >
               <Trash2 className="size-3" />
             </Button>
           </div>
@@ -219,7 +225,10 @@ function BlockEditor({
                   </div>
                   <div className="grid gap-1">
                     <Label className="text-xs">Align</Label>
-                    <Select value={block.props.align || "center"} onValueChange={(v) => updateBlock(block.id, { props: { ...block.props, align: v } })}>
+                    <Select
+                      value={block.props.align || "center"}
+                      onValueChange={(v) => updateBlock(block.id, { props: { ...block.props, align: v } })}
+                    >
                       <SelectTrigger className="text-xs">
                         <SelectValue />
                       </SelectTrigger>
@@ -276,19 +285,26 @@ function BlockEditor({
                       <input
                         type="color"
                         value={block.props.textColor || "#ffffff"}
-                        onChange={(e) => updateBlock(block.id, { props: { ...block.props, textColor: e.target.value } })}
+                        onChange={(e) =>
+                          updateBlock(block.id, { props: { ...block.props, textColor: e.target.value } })
+                        }
                         className="size-7 cursor-pointer rounded border"
                       />
                       <Input
                         value={block.props.textColor || "#ffffff"}
-                        onChange={(e) => updateBlock(block.id, { props: { ...block.props, textColor: e.target.value } })}
+                        onChange={(e) =>
+                          updateBlock(block.id, { props: { ...block.props, textColor: e.target.value } })
+                        }
                         className="text-xs"
                       />
                     </div>
                   </div>
                   <div className="grid gap-1">
                     <Label className="text-xs">Align</Label>
-                    <Select value={block.props.align || "center"} onValueChange={(v) => updateBlock(block.id, { props: { ...block.props, align: v } })}>
+                    <Select
+                      value={block.props.align || "center"}
+                      onValueChange={(v) => updateBlock(block.id, { props: { ...block.props, align: v } })}
+                    >
                       <SelectTrigger className="text-xs">
                         <SelectValue />
                       </SelectTrigger>
@@ -401,7 +417,8 @@ export function NewsletterSection() {
   }, [])
 
   useEffect(() => {
-    load()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load from IndexedDB
+    void load()
   }, [load])
 
   // Compute merge fields from selected lists
@@ -503,9 +520,7 @@ export function NewsletterSection() {
   }
 
   function toggleListSelection(listId: number) {
-    setSelectedListIds((prev) =>
-      prev.includes(listId) ? prev.filter((id) => id !== listId) : [...prev, listId]
-    )
+    setSelectedListIds((prev) => (prev.includes(listId) ? prev.filter((id) => id !== listId) : [...prev, listId]))
   }
 
   function getStatusBadge(status: string) {
@@ -528,9 +543,7 @@ export function NewsletterSection() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold text-foreground">Newsletters</h2>
-            <p className="text-sm text-muted-foreground">
-              Create and manage your email campaigns
-            </p>
+            <p className="text-sm text-muted-foreground">Create and manage your email campaigns</p>
           </div>
           <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" />
@@ -585,14 +598,29 @@ export function NewsletterSection() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           {nl.status === "draft" && (
-                            <Button variant="ghost" size="icon" aria-label="Edit newsletter" onClick={() => openEdit(nl)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Edit newsletter"
+                              onClick={() => openEdit(nl)}
+                            >
                               <Pencil className="size-4" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="icon" aria-label="Duplicate newsletter" onClick={() => handleDuplicate(nl)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Duplicate newsletter"
+                            onClick={() => handleDuplicate(nl)}
+                          >
                             <Copy className="size-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" aria-label="Delete newsletter" onClick={() => handleDelete(nl.id!)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Delete newsletter"
+                            onClick={() => handleDelete(nl.id!)}
+                          >
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
                         </div>
@@ -631,12 +659,8 @@ export function NewsletterSection() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">
-            {editing ? "Edit" : "New"} Newsletter
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Build your email with content blocks
-          </p>
+          <h2 className="text-xl font-semibold text-foreground">{editing ? "Edit" : "New"} Newsletter</h2>
+          <p className="text-sm text-muted-foreground">Build your email with content blocks</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setDialogOpen(false)}>
@@ -646,9 +670,7 @@ export function NewsletterSection() {
             <Eye className="mr-2 size-4" />
             Preview
           </Button>
-          <Button onClick={handleSave}>
-            Save Newsletter
-          </Button>
+          <Button onClick={handleSave}>Save Newsletter</Button>
         </div>
       </div>
 
@@ -681,15 +703,12 @@ export function NewsletterSection() {
                     onChange={(e) => setSubject(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    {'Supports merge fields: {{firstName}}, {{email}}, etc.'}
+                    {"Supports merge fields: {{firstName}}, {{email}}, etc."}
                   </p>
                 </div>
                 <div className="grid gap-2">
                   <Label>Sender</Label>
-                  <Select
-                    value={senderId ? String(senderId) : ""}
-                    onValueChange={(v) => setSenderId(parseInt(v))}
-                  >
+                  <Select value={senderId ? String(senderId) : ""} onValueChange={(v) => setSenderId(parseInt(v))}>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select sender" />
                     </SelectTrigger>
@@ -719,9 +738,7 @@ export function NewsletterSection() {
                         <span className="flex-1">{list.name}</span>
                       </label>
                     ))}
-                    {lists.length === 0 && (
-                      <p className="text-xs text-muted-foreground">No lists available</p>
-                    )}
+                    {lists.length === 0 && <p className="text-xs text-muted-foreground">No lists available</p>}
                   </div>
                 </div>
               </div>

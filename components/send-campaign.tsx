@@ -8,13 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -23,34 +17,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Send,
-  Eye,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Loader2,
-  Mail,
-} from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Send, Eye, AlertTriangle, CheckCircle2, XCircle, Clock, Loader2, Mail } from "lucide-react"
 import { toast } from "sonner"
 
 import { type EditorBlock, buildFullHtml } from "@/lib/email-builder"
 
 function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
 
 function replaceMergeFields(html: string, contact: Contact): string {
@@ -344,7 +318,9 @@ export function SendCampaignSection() {
     if (abortRef.current) {
       await db.newsletters.update(selectedNl.id!, { status: "draft" })
       setSending(false)
-      toast.info(`Campaign aborted. ${sentCount} delivered, ${failedCount} failed, ${allContacts.length - sentCount - failedCount} skipped.`)
+      toast.info(
+        `Campaign aborted. ${sentCount} delivered, ${failedCount} failed, ${allContacts.length - sentCount - failedCount} skipped.`,
+      )
     } else {
       await db.newsletters.update(selectedNl.id!, { status: "sent", sentAt: new Date() })
       setSending(false)
@@ -359,15 +335,14 @@ export function SendCampaignSection() {
   }
 
   const draftNewsletters = newsletters.filter((n) => n.status === "draft")
-  const progressPct = sendProgress.total > 0 ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100 : 0
+  const progressPct =
+    sendProgress.total > 0 ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100 : 0
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-xl font-semibold text-foreground">Send Campaign</h2>
-        <p className="text-sm text-muted-foreground">
-          Select a newsletter and send it to your subscribers
-        </p>
+        <p className="text-sm text-muted-foreground">Select a newsletter and send it to your subscribers</p>
       </div>
 
       <Card>
@@ -387,7 +362,10 @@ export function SendCampaignSection() {
                     <SelectItem key={nl.id} value={String(nl.id)}>
                       <div className="flex items-center gap-2">
                         <span>{nl.name}</span>
-                        <Badge variant={nl.status === "draft" ? "secondary" : nl.status === "sent" ? "default" : "outline"} className="text-xs">
+                        <Badge
+                          variant={nl.status === "draft" ? "secondary" : nl.status === "sent" ? "default" : "outline"}
+                          className="text-xs"
+                        >
                           {nl.status}
                         </Badge>
                       </div>
@@ -559,8 +537,8 @@ export function SendCampaignSection() {
             </DialogTitle>
             <DialogDescription>
               You are about to send <strong>{selectedNl?.subject}</strong> to{" "}
-              <strong>{recipientCount} recipients</strong> across {selectedNl?.listIds.length} list(s).
-              This action cannot be undone.
+              <strong>{recipientCount} recipients</strong> across {selectedNl?.listIds.length} list(s). This action
+              cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -582,12 +560,7 @@ export function SendCampaignSection() {
             <DialogTitle>Email Preview</DialogTitle>
           </DialogHeader>
           <div className="overflow-auto rounded border bg-muted/30" style={{ height: "60vh" }}>
-            <iframe
-              srcDoc={previewHtml}
-              className="size-full"
-              title="Email preview"
-              sandbox="allow-same-origin"
-            />
+            <iframe srcDoc={previewHtml} className="size-full" title="Email preview" sandbox="allow-same-origin" />
           </div>
         </DialogContent>
       </Dialog>
@@ -601,8 +574,8 @@ export function SendCampaignSection() {
               Send Test Email
             </DialogTitle>
             <DialogDescription>
-              Send a test copy of <strong>{selectedNl?.name}</strong> to any email address.
-              Merge fields will be replaced with sample data.
+              Send a test copy of <strong>{selectedNl?.name}</strong> to any email address. Merge fields will be
+              replaced with sample data.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 py-2">
@@ -624,15 +597,8 @@ export function SendCampaignSection() {
             <Button variant="outline" onClick={() => setTestEmailOpen(false)} disabled={sendingTest}>
               Cancel
             </Button>
-            <Button
-              onClick={handleSendTest}
-              disabled={sendingTest || !testEmailAddress.trim()}
-            >
-              {sendingTest ? (
-                <Loader2 className="mr-2 size-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 size-4" />
-              )}
+            <Button onClick={handleSendTest} disabled={sendingTest || !testEmailAddress.trim()}>
+              {sendingTest ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
               {sendingTest ? "Sending..." : "Send Test"}
             </Button>
           </DialogFooter>

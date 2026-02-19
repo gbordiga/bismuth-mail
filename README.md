@@ -21,15 +21,15 @@ A self-hosted newsletter management application built with Next.js. Configure SM
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Framework | [Next.js 16](https://nextjs.org/) (App Router) |
-| UI | [React 19](https://react.dev/), [Radix UI](https://www.radix-ui.com/), [Tailwind CSS 4](https://tailwindcss.com/) |
-| Components | [shadcn/ui](https://ui.shadcn.com/) pattern |
-| Database | [Dexie](https://dexie.org/) (IndexedDB) |
-| Email | [Nodemailer](https://nodemailer.com/) via API routes |
-| Validation | [Zod](https://zod.dev/) |
-| Language | TypeScript 5.7 |
+| Layer      | Technology                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- |
+| Framework  | [Next.js 16](https://nextjs.org/) (App Router)                                                                    |
+| UI         | [React 19](https://react.dev/), [Radix UI](https://www.radix-ui.com/), [Tailwind CSS 4](https://tailwindcss.com/) |
+| Components | [shadcn/ui](https://ui.shadcn.com/) pattern                                                                       |
+| Database   | [Dexie](https://dexie.org/) (IndexedDB)                                                                           |
+| Email      | [Nodemailer](https://nodemailer.com/) via API routes                                                              |
+| Validation | [Zod](https://zod.dev/)                                                                                           |
+| Language   | TypeScript 5.7                                                                                                    |
 
 ## Getting Started
 
