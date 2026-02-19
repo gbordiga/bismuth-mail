@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { db, type Newsletter, type Sender, type EmailList, type Contact, type SmtpConfig, type SendLog } from "@/lib/db"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -38,6 +39,7 @@ import {
   XCircle,
   Clock,
   Loader2,
+  Mail,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -79,6 +81,9 @@ export function SendCampaignSection() {
   const [previewHtml, setPreviewHtml] = useState("")
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [recipientCount, setRecipientCount] = useState(0)
+  const [testEmailOpen, setTestEmailOpen] = useState(false)
+  const [testEmailAddress, setTestEmailAddress] = useState("")
+  const [sendingTest, setSendingTest] = useState(false)
 
   const abortRef = useRef(false)
 
@@ -137,6 +142,67 @@ export function SendCampaignSection() {
       .replace(/\{\{lastName\}\}/g, "Doe")
     setPreviewHtml(sample)
     setPreviewOpen(true)
+  }
+
+  async function handleSendTest() {
+    if (!selectedNl || !testEmailAddress.trim()) return
+    setSendingTest(true)
+
+    const sender = senders.find((s) => s.id === selectedNl.senderId)
+    const smtpConfig = sender ? smtpConfigs.find((c) => c.id === sender.smtpConfigId) : null
+
+    if (!sender || !smtpConfig) {
+      toast.error("No sender or SMTP config found for this newsletter")
+      setSendingTest(false)
+      return
+    }
+
+    let blocks: EditorBlock[]
+    try {
+      blocks = JSON.parse(selectedNl.htmlContent)
+    } catch {
+      blocks = [{ id: "raw", type: "html", content: selectedNl.htmlContent, props: {} }]
+    }
+
+    const unsubEmail = sender.unsubscribeEmail || sender.email
+    const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${testEmailAddress.trim()} from this newsletter.`)}`
+    const fullHtml = buildFullHtml(blocks, sender.signature, mailtoHref)
+    const html = fullHtml
+      .replace(/\{\{email\}\}/g, testEmailAddress.trim())
+      .replace(/\{\{firstName\}\}/g, "John")
+      .replace(/\{\{lastName\}\}/g, "Doe")
+
+    try {
+      const res = await fetch("/api/smtp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          smtp: {
+            host: smtpConfig.host,
+            port: smtpConfig.port,
+            secure: smtpConfig.secure,
+            auth: { user: smtpConfig.username, pass: smtpConfig.password },
+          },
+          from: { name: sender.name, email: sender.email },
+          replyTo: sender.replyTo || sender.email,
+          to: testEmailAddress.trim(),
+          subject: `[TEST] ${selectedNl.subject}`,
+          html,
+        }),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        toast.success(`Test email sent to ${testEmailAddress.trim()}`)
+        setTestEmailOpen(false)
+      } else {
+        toast.error(`Failed to send test email: ${data.error}`)
+      }
+    } catch (err) {
+      toast.error(`Failed to send test email: ${String(err)}`)
+    } finally {
+      setSendingTest(false)
+    }
   }
 
   async function prepareConfirm() {
@@ -372,6 +438,15 @@ export function SendCampaignSection() {
                     <Eye className="mr-2 size-4" />
                     Preview
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTestEmailOpen(true)}
+                    disabled={!selectedNl.senderId}
+                  >
+                    <Mail className="mr-2 size-4" />
+                    Send Test
+                  </Button>
                   {selectedNl.status === "draft" && (
                     <Button
                       size="sm"
@@ -514,6 +589,53 @@ export function SendCampaignSection() {
               sandbox="allow-same-origin"
             />
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send test email dialog */}
+      <Dialog open={testEmailOpen} onOpenChange={setTestEmailOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="size-5" />
+              Send Test Email
+            </DialogTitle>
+            <DialogDescription>
+              Send a test copy of <strong>{selectedNl?.name}</strong> to any email address.
+              Merge fields will be replaced with sample data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            <Label htmlFor="test-email-address">Recipient Email</Label>
+            <Input
+              id="test-email-address"
+              type="email"
+              placeholder="test@example.com"
+              value={testEmailAddress}
+              onChange={(e) => setTestEmailAddress(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && testEmailAddress.trim() && !sendingTest) {
+                  handleSendTest()
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestEmailOpen(false)} disabled={sendingTest}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendTest}
+              disabled={sendingTest || !testEmailAddress.trim()}
+            >
+              {sendingTest ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 size-4" />
+              )}
+              {sendingTest ? "Sending..." : "Send Test"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
