@@ -27,6 +27,8 @@ const emptyConfig: Omit<SmtpConfig, "id" | "createdAt"> = {
   secure: false,
   username: "",
   password: "",
+  delayMs: 200,
+  batchSize: 10,
 }
 
 export function SmtpConfigSection() {
@@ -60,6 +62,8 @@ export function SmtpConfigSection() {
       secure: config.secure,
       username: config.username,
       password: config.password,
+      delayMs: config.delayMs ?? 200,
+      batchSize: config.batchSize ?? 10,
     })
     setDialogOpen(true)
   }
@@ -256,6 +260,36 @@ export function SmtpConfigSection() {
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="smtp-delay">Delay between emails (ms)</Label>
+                <Input
+                  id="smtp-delay"
+                  type="number"
+                  min={0}
+                  max={10000}
+                  value={form.delayMs}
+                  onChange={(e) => setForm({ ...form, delayMs: parseInt(e.target.value) || 0 })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Throttle to avoid SMTP rate limits. 200ms is a safe default.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="smtp-batch">Batch size</Label>
+                <Input
+                  id="smtp-batch"
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={form.batchSize}
+                  onChange={(e) => setForm({ ...form, batchSize: Math.min(50, Math.max(1, parseInt(e.target.value) || 1)) })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Emails per API call. Keep low (5-10) on Vercel Hobby, up to 30-50 on Pro.
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter>

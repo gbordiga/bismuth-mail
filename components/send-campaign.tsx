@@ -68,13 +68,6 @@ export function SendCampaignSection() {
       db.smtpConfigs.toArray(),
       db.emailLists.toArray(),
     ])
-    // Recover newsletters stuck in "sending" (e.g. browser closed mid-send)
-    for (const nl of allNl) {
-      if (nl.status === "sending") {
-        await db.newsletters.update(nl.id!, { status: "draft" })
-        nl.status = "draft"
-      }
-    }
     setNewsletters(allNl)
     setSenders(allSenders)
     setSmtpConfigs(allSmtp)
@@ -218,7 +211,7 @@ export function SendCampaignSection() {
       blocks = [{ id: "raw", type: "html", content: selectedNl.htmlContent, props: {} }]
     }
 
-    // Gather all contacts (deduplicate by email using Set)
+    // Gather all contacts (deduplicate by email)
     const allContacts: Contact[] = []
     const seenEmails = new Set<string>()
     for (const lid of selectedNl.listIds) {
@@ -241,27 +234,50 @@ export function SendCampaignSection() {
       return
     }
 
+    // Resume: load existing logs and skip already-sent emails
+    const existingLogs = await db.sendLogs
+      .where("newsletterId")
+      .equals(selectedNl.id!)
+      .toArray()
+    const alreadySent = new Set(
+      existingLogs.filter((l) => l.status === "sent").map((l) => l.contactEmail),
+    )
+    const toSend = allContacts.filter((c) => !alreadySent.has(c.email))
+
     await db.newsletters.update(selectedNl.id!, { status: "sending" })
-    setSendProgress({ total: allContacts.length, sent: 0, failed: 0 })
 
-    // Clear old logs
-    await db.sendLogs.where("newsletterId").equals(selectedNl.id!).delete()
+    let sentCount = alreadySent.size
+    let failedCount = existingLogs.filter((l) => l.status === "failed").length
+    setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
 
-    let sentCount = 0
-    let failedCount = 0
+    if (toSend.length === 0) {
+      await db.newsletters.update(selectedNl.id!, { status: "sent", sentAt: new Date() })
+      setSending(false)
+      toast.success("All emails were already sent.")
+      load()
+      return
+    }
 
+    const batchSize = smtpConfig.batchSize ?? 10
+    const delayMs = smtpConfig.delayMs ?? 200
     const unsubEmail = sender.unsubscribeEmail || sender.email
 
-    for (const contact of allContacts) {
+    for (let i = 0; i < toSend.length; i += batchSize) {
       if (abortRef.current) break
 
-      const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this newsletter.`)}`
-      const fullHtml = buildFullHtml(blocks, sender.signature, mailtoHref)
-      const personalizedHtml = replaceMergeFields(fullHtml, contact)
-      const personalizedSubject = replaceMergeFields(selectedNl.subject, contact)
+      const batch = toSend.slice(i, i + batchSize)
+      const recipients = batch.map((contact) => {
+        const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this newsletter.`)}`
+        const fullHtml = buildFullHtml(blocks, sender.signature, mailtoHref)
+        return {
+          to: contact.email,
+          subject: replaceMergeFields(selectedNl.subject, contact),
+          html: replaceMergeFields(fullHtml, contact),
+        }
+      })
 
       try {
-        const res = await fetch("/api/smtp/send", {
+        const res = await fetch("/api/smtp/send-batch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -273,53 +289,73 @@ export function SendCampaignSection() {
             },
             from: { name: sender.name, email: sender.email },
             replyTo: sender.replyTo || sender.email,
-            to: contact.email,
-            subject: personalizedSubject,
-            html: personalizedHtml,
+            recipients,
+            delayMs,
+            maxRetries: 2,
           }),
         })
 
         const data = await res.json()
-        if (data.success) {
-          sentCount++
-          await db.sendLogs.add({
-            newsletterId: selectedNl.id!,
-            contactEmail: contact.email,
-            contactName: `${contact.firstName} ${contact.lastName}`.trim(),
-            status: "sent",
-            sentAt: new Date(),
-          })
+        if (data.results) {
+          for (const r of data.results as { email: string; status: "sent" | "failed"; attempts: number; error?: string }[]) {
+            const contact = batch.find((c) => c.email === r.email)
+            const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : r.email
+            if (r.status === "sent") {
+              sentCount++
+            } else {
+              failedCount++
+            }
+            await db.sendLogs.add({
+              newsletterId: selectedNl.id!,
+              contactEmail: r.email,
+              contactName,
+              status: r.status,
+              attempt: r.attempts,
+              error: r.error,
+              sentAt: new Date(),
+            })
+          }
         } else {
+          for (const contact of batch) {
+            failedCount++
+            await db.sendLogs.add({
+              newsletterId: selectedNl.id!,
+              contactEmail: contact.email,
+              contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+              status: "failed",
+              attempt: 1,
+              error: data.error || "Batch request failed",
+              sentAt: new Date(),
+            })
+          }
+        }
+      } catch (err) {
+        for (const contact of batch) {
           failedCount++
           await db.sendLogs.add({
             newsletterId: selectedNl.id!,
             contactEmail: contact.email,
             contactName: `${contact.firstName} ${contact.lastName}`.trim(),
             status: "failed",
-            error: data.error,
+            attempt: 1,
+            error: String(err),
             sentAt: new Date(),
           })
         }
-      } catch (err) {
-        failedCount++
-        await db.sendLogs.add({
-          newsletterId: selectedNl.id!,
-          contactEmail: contact.email,
-          contactName: `${contact.firstName} ${contact.lastName}`.trim(),
-          status: "failed",
-          error: String(err),
-          sentAt: new Date(),
-        })
       }
 
       setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
+
+      if (i + batchSize < toSend.length && !abortRef.current) {
+        await new Promise((r) => setTimeout(r, 1000))
+      }
     }
 
     if (abortRef.current) {
-      await db.newsletters.update(selectedNl.id!, { status: "draft" })
+      await db.newsletters.update(selectedNl.id!, { status: "sending" })
       setSending(false)
       toast.info(
-        `Campaign aborted. ${sentCount} delivered, ${failedCount} failed, ${allContacts.length - sentCount - failedCount} skipped.`,
+        `Campaign paused. ${sentCount} delivered, ${failedCount} failed, ${allContacts.length - sentCount - failedCount} remaining. You can resume later.`,
       )
     } else {
       await db.newsletters.update(selectedNl.id!, { status: "sent", sentAt: new Date() })
@@ -329,9 +365,17 @@ export function SendCampaignSection() {
     load()
   }
 
+  async function handleResetToDraft() {
+    if (!selectedNl) return
+    await db.sendLogs.where("newsletterId").equals(selectedNl.id!).delete()
+    await db.newsletters.update(selectedNl.id!, { status: "draft" })
+    toast.info("Newsletter reset to draft. All send logs cleared.")
+    load()
+  }
+
   function abortSend() {
     abortRef.current = true
-    toast.info("Aborting... will stop after current email.")
+    toast.info("Aborting... will stop after current batch.")
   }
 
   const draftNewsletters = newsletters.filter((n) => n.status === "draft")
@@ -434,6 +478,25 @@ export function SendCampaignSection() {
                       <Send className="mr-2 size-4" />
                       Send Now
                     </Button>
+                  )}
+                  {selectedNl.status === "sending" && !sending && (
+                    <>
+                      <Button
+                        size="sm"
+                        onClick={handleSend}
+                        disabled={selectedNl.listIds.length === 0 || !selectedNl.senderId}
+                      >
+                        <Send className="mr-2 size-4" />
+                        Resume Send
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleResetToDraft}
+                      >
+                        Reset to Draft
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>

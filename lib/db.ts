@@ -10,6 +10,8 @@ export interface SmtpConfig {
   secure: boolean
   username: string
   password: string
+  delayMs: number
+  batchSize: number
   createdAt: Date
 }
 
@@ -66,6 +68,7 @@ export interface SendLog {
   contactEmail: string
   contactName: string
   status: "pending" | "sent" | "failed"
+  attempt: number
   error?: string
   sentAt: Date | null
 }
@@ -88,6 +91,20 @@ db.version(1).stores({
   contacts: "++id, listId, email, subscribedAt, unsubscribed",
   newsletters: "++id, name, status, createdAt",
   sendLogs: "++id, newsletterId, contactEmail, status",
+})
+
+db.version(2).stores({
+  smtpConfigs: "++id, name, createdAt",
+  senders: "++id, name, email, smtpConfigId, createdAt",
+  emailLists: "++id, name, createdAt",
+  contacts: "++id, listId, email, subscribedAt, unsubscribed",
+  newsletters: "++id, name, status, createdAt",
+  sendLogs: "++id, newsletterId, contactEmail, status",
+}).upgrade(tx => {
+  return tx.table("smtpConfigs").toCollection().modify(config => {
+    if (config.delayMs === undefined) config.delayMs = 200
+    if (config.batchSize === undefined) config.batchSize = 10
+  })
 })
 
 export { db }
