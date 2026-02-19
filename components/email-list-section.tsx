@@ -199,7 +199,13 @@ export function EmailListSection() {
   }
 
   async function handleDeleteList(id: number) {
+    if (!window.confirm("Delete this list and all its contacts? This cannot be undone.")) return
     await db.contacts.where("listId").equals(id).delete()
+    // Clean up newsletter listIds references
+    const referencingNls = await db.newsletters.filter((nl) => nl.listIds.includes(id)).toArray()
+    for (const nl of referencingNls) {
+      await db.newsletters.update(nl.id!, { listIds: nl.listIds.filter((lid) => lid !== id) })
+    }
     await db.emailLists.delete(id)
     if (selectedList?.id === id) setSelectedList(null)
     toast.success("List and all contacts deleted")
@@ -257,6 +263,7 @@ export function EmailListSection() {
   }
 
   async function handleDeleteContact(id: number) {
+    if (!window.confirm("Remove this contact?")) return
     await db.contacts.delete(id)
     toast.success("Contact removed")
     loadContacts(selectedList!.id!)
@@ -304,24 +311,23 @@ export function EmailListSection() {
       return
     }
     const dataRows = csvData.slice(1)
-    let imported = 0
+
+    const existingContacts = await db.contacts
+      .where("listId")
+      .equals(selectedList!.id!)
+      .toArray()
+    const existingEmails = new Set(existingContacts.map((c) => c.email))
+
+    const toAdd: Omit<Contact, "id">[] = []
     let skipped = 0
 
     for (const row of dataRows) {
       const email = row[csvMapping.email]?.trim()
-      if (!email || !email.includes("@")) {
+      if (!email || !email.includes("@") || existingEmails.has(email)) {
         skipped++
         continue
       }
-      const existing = await db.contacts
-        .where("listId")
-        .equals(selectedList!.id!)
-        .filter((c) => c.email === email)
-        .first()
-      if (existing) {
-        skipped++
-        continue
-      }
+      existingEmails.add(email)
 
       const customData: Record<string, string> = {}
       if (selectedList?.customFields) {
@@ -333,7 +339,7 @@ export function EmailListSection() {
         })
       }
 
-      await db.contacts.add({
+      toAdd.push({
         listId: selectedList!.id!,
         email,
         firstName: csvMapping.firstName !== undefined ? (row[csvMapping.firstName]?.trim() ?? "") : "",
@@ -342,10 +348,13 @@ export function EmailListSection() {
         subscribedAt: new Date(),
         unsubscribed: false,
       })
-      imported++
     }
 
-    toast.success(`Imported ${imported} contacts, ${skipped} skipped`)
+    if (toAdd.length > 0) {
+      await db.contacts.bulkAdd(toAdd)
+    }
+
+    toast.success(`Imported ${toAdd.length} contacts, ${skipped} skipped`)
     setImportDialogOpen(false)
     setCsvData([])
     loadContacts(selectedList!.id!)
@@ -616,10 +625,10 @@ export function EmailListSection() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEditContact(contact)}>
+                        <Button variant="ghost" size="icon" aria-label="Edit contact" onClick={() => openEditContact(contact)}>
                           <Pencil className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteContact(contact.id!)}>
+                        <Button variant="ghost" size="icon" aria-label="Delete contact" onClick={() => handleDeleteContact(contact.id!)}>
                           <Trash2 className="size-4 text-destructive" />
                         </Button>
                       </div>

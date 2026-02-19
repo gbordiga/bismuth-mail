@@ -175,12 +175,12 @@ export function SmtpConfigSection() {
                     <TableCell className="font-mono text-xs">{config.username}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEdit(config)}>
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(config.id!)}>
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
+                        <Button variant="ghost" size="icon" aria-label="Edit SMTP config" onClick={() => openEdit(config)}>
+                            <Pencil className="size-4" />
+                          </Button>
+                        <Button variant="ghost" size="icon" aria-label="Delete SMTP config" onClick={() => handleDelete(config.id!)}>
+                            <Trash2 className="size-4 text-destructive" />
+                          </Button>
                       </div>
                     </TableCell>
                   </TableRow>

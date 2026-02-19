@@ -112,38 +112,24 @@ export function BackupSection() {
     setImporting(true)
 
     try {
-      // Clear all existing data
-      await Promise.all([
-        db.smtpConfigs.clear(),
-        db.senders.clear(),
-        db.emailLists.clear(),
-        db.contacts.clear(),
-        db.newsletters.clear(),
-        db.sendLogs.clear(),
-      ])
+      await db.transaction("rw", [db.smtpConfigs, db.senders, db.emailLists, db.contacts, db.newsletters, db.sendLogs], async () => {
+        await Promise.all([
+          db.smtpConfigs.clear(),
+          db.senders.clear(),
+          db.emailLists.clear(),
+          db.contacts.clear(),
+          db.newsletters.clear(),
+          db.sendLogs.clear(),
+        ])
 
-      // Bulk insert all data (strip the id field so Dexie auto-generates new ones)
-      const stripId = (items: Record<string, unknown>[]) =>
-        items.map(({ id, ...rest }) => rest)
-
-      await db.smtpConfigs.bulkAdd(
-        stripId(importSummary.smtpConfigs as Record<string, unknown>[]) as Parameters<typeof db.smtpConfigs.bulkAdd>[0]
-      )
-      await db.senders.bulkAdd(
-        stripId(importSummary.senders as Record<string, unknown>[]) as Parameters<typeof db.senders.bulkAdd>[0]
-      )
-      await db.emailLists.bulkAdd(
-        stripId(importSummary.emailLists as Record<string, unknown>[]) as Parameters<typeof db.emailLists.bulkAdd>[0]
-      )
-      await db.contacts.bulkAdd(
-        stripId(importSummary.contacts as Record<string, unknown>[]) as Parameters<typeof db.contacts.bulkAdd>[0]
-      )
-      await db.newsletters.bulkAdd(
-        stripId(importSummary.newsletters as Record<string, unknown>[]) as Parameters<typeof db.newsletters.bulkAdd>[0]
-      )
-      await db.sendLogs.bulkAdd(
-        stripId(importSummary.sendLogs as Record<string, unknown>[]) as Parameters<typeof db.sendLogs.bulkAdd>[0]
-      )
+        // Preserve original IDs so foreign key references remain valid
+        await db.smtpConfigs.bulkAdd(importSummary.smtpConfigs as Parameters<typeof db.smtpConfigs.bulkAdd>[0])
+        await db.senders.bulkAdd(importSummary.senders as Parameters<typeof db.senders.bulkAdd>[0])
+        await db.emailLists.bulkAdd(importSummary.emailLists as Parameters<typeof db.emailLists.bulkAdd>[0])
+        await db.contacts.bulkAdd(importSummary.contacts as Parameters<typeof db.contacts.bulkAdd>[0])
+        await db.newsletters.bulkAdd(importSummary.newsletters as Parameters<typeof db.newsletters.bulkAdd>[0])
+        await db.sendLogs.bulkAdd(importSummary.sendLogs as Parameters<typeof db.sendLogs.bulkAdd>[0])
+      })
 
       toast.success("Backup imported successfully! Reload the page to see all data.")
       setPendingFile(null)

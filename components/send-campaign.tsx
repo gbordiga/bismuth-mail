@@ -41,75 +41,24 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-// Re-export the block-to-html utilities
-type BlockType = "text" | "image" | "button" | "divider" | "html"
+import { type EditorBlock, buildFullHtml } from "@/lib/email-builder"
 
-interface EditorBlock {
-  id: string
-  type: BlockType
-  content: string
-  props: Record<string, string>
-}
-
-function blockToHtml(block: EditorBlock): string {
-  switch (block.type) {
-    case "text":
-      return `<div style="padding: 8px 0;">${block.content}</div>`
-    case "image":
-      if (!block.content) return ""
-      return `<div style="padding: 8px 0; text-align: ${block.props.align || "center"};"><img src="${block.content}" alt="${block.props.alt || ""}" style="max-width: ${block.props.width || "100%"}; height: auto;" /></div>`
-    case "button":
-      return `<div style="padding: 16px 0; text-align: ${block.props.align || "center"};"><a href="${block.props.href || "#"}" style="display: inline-block; padding: 12px 28px; background-color: ${block.props.bgColor || "#3b82f6"}; color: ${block.props.textColor || "#ffffff"}; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">${block.content}</a></div>`
-    case "divider":
-      return `<hr style="border: none; border-top: ${block.props.thickness || "1"}px solid ${block.props.color || "#e5e7eb"}; margin: 16px 0;" />`
-    case "html":
-      return block.content
-  }
-}
-
-function buildFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeHref: string): string {
-  const body = blocks.map(blockToHtml).join("\n")
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
-  .email-wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-  .email-body { padding: 32px 24px; }
-  .email-footer { padding: 24px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #71717a; }
-  .email-footer a { color: #71717a; text-decoration: underline; }
-  img { max-width: 100%; height: auto; }
-  p { margin: 0 0 12px 0; line-height: 1.6; color: #18181b; }
-  h1, h2, h3 { margin: 0 0 12px 0; color: #18181b; }
-  a { color: #3b82f6; }
-</style>
-</head>
-<body>
-<div class="email-wrapper">
-  <div class="email-body">
-    ${body}
-  </div>
-  ${senderSig ? `<div style="padding: 16px 24px; border-top: 1px solid #e5e7eb;">${senderSig}</div>` : ""}
-  <div class="email-footer">
-    <p>You received this email because you subscribed to our newsletter.</p>
-    <p>To unsubscribe, <a href="${unsubscribeHref}">click here to send an unsubscribe request</a>.</p>
-  </div>
-</div>
-</body>
-</html>`
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
 }
 
 function replaceMergeFields(html: string, contact: Contact): string {
   let result = html
-  result = result.replace(/\{\{email\}\}/g, contact.email)
-  result = result.replace(/\{\{firstName\}\}/g, contact.firstName)
-  result = result.replace(/\{\{lastName\}\}/g, contact.lastName)
-  // Custom fields
+  result = result.replace(/\{\{email\}\}/g, escapeHtml(contact.email))
+  result = result.replace(/\{\{firstName\}\}/g, escapeHtml(contact.firstName))
+  result = result.replace(/\{\{lastName\}\}/g, escapeHtml(contact.lastName))
   if (contact.customData) {
     for (const [key, value] of Object.entries(contact.customData)) {
-      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value || "")
+      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), escapeHtml(value || ""))
     }
   }
   return result
@@ -140,6 +89,13 @@ export function SendCampaignSection() {
       db.smtpConfigs.toArray(),
       db.emailLists.toArray(),
     ])
+    // Recover newsletters stuck in "sending" (e.g. browser closed mid-send)
+    for (const nl of allNl) {
+      if (nl.status === "sending") {
+        await db.newsletters.update(nl.id!, { status: "draft" })
+        nl.status = "draft"
+      }
+    }
     setNewsletters(allNl)
     setSenders(allSenders)
     setSmtpConfigs(allSmtp)
@@ -172,7 +128,7 @@ export function SendCampaignSection() {
     }
     const unsubEmail = sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com"
     const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent("Please remove john@example.com from this newsletter.")}`
-    const html = buildFullHtml(blocks, sender?.signature || "", mailtoHref)
+    const html = buildFullHtml(blocks, sender?.signature || "", mailtoHref, true)
 
     // Replace with sample data
     const sample = html
@@ -185,17 +141,18 @@ export function SendCampaignSection() {
 
   async function prepareConfirm() {
     if (!selectedNl) return
-    // Count recipients
-    let count = 0
+    const seen = new Set<string>()
     for (const lid of selectedNl.listIds) {
       const contactsInList = await db.contacts
         .where("listId")
         .equals(lid)
         .filter((c) => !c.unsubscribed)
-        .count()
-      count += contactsInList
+        .toArray()
+      for (const c of contactsInList) {
+        seen.add(c.email)
+      }
     }
-    setRecipientCount(count)
+    setRecipientCount(seen.size)
     setConfirmOpen(true)
   }
 
@@ -221,8 +178,9 @@ export function SendCampaignSection() {
       blocks = [{ id: "raw", type: "html", content: selectedNl.htmlContent, props: {} }]
     }
 
-    // Gather all contacts
+    // Gather all contacts (deduplicate by email using Set)
     const allContacts: Contact[] = []
+    const seenEmails = new Set<string>()
     for (const lid of selectedNl.listIds) {
       const contactsInList = await db.contacts
         .where("listId")
@@ -230,10 +188,17 @@ export function SendCampaignSection() {
         .filter((c) => !c.unsubscribed)
         .toArray()
       for (const c of contactsInList) {
-        if (!allContacts.find((ac) => ac.email === c.email)) {
+        if (!seenEmails.has(c.email)) {
+          seenEmails.add(c.email)
           allContacts.push(c)
         }
       }
+    }
+
+    if (allContacts.length === 0) {
+      toast.error("No active recipients found in the selected lists")
+      setSending(false)
+      return
     }
 
     await db.newsletters.update(selectedNl.id!, { status: "sending" })
@@ -310,9 +275,15 @@ export function SendCampaignSection() {
       setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
     }
 
-    await db.newsletters.update(selectedNl.id!, { status: "sent", sentAt: new Date() })
-    setSending(false)
-    toast.success(`Campaign sent! ${sentCount} delivered, ${failedCount} failed.`)
+    if (abortRef.current) {
+      await db.newsletters.update(selectedNl.id!, { status: "draft" })
+      setSending(false)
+      toast.info(`Campaign aborted. ${sentCount} delivered, ${failedCount} failed, ${allContacts.length - sentCount - failedCount} skipped.`)
+    } else {
+      await db.newsletters.update(selectedNl.id!, { status: "sent", sentAt: new Date() })
+      setSending(false)
+      toast.success(`Campaign sent! ${sentCount} delivered, ${failedCount} failed.`)
+    }
     load()
   }
 

@@ -99,6 +99,12 @@ export function SenderSection() {
   }
 
   async function handleDelete(id: number) {
+    const nlCount = await db.newsletters.filter((nl) => nl.senderId === id).count()
+    if (nlCount > 0) {
+      toast.error(`Cannot delete: this sender is used by ${nlCount} newsletter(s)`)
+      return
+    }
+    if (!window.confirm("Are you sure you want to delete this sender?")) return
     await db.senders.delete(id)
     toast.success("Sender deleted")
     load()
@@ -166,10 +172,10 @@ export function SenderSection() {
                       <TableCell>{getSmtpName(sender.smtpConfigId)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => openEdit(sender)}>
+                          <Button variant="ghost" size="icon" aria-label="Edit sender" onClick={() => openEdit(sender)}>
                             <Pencil className="size-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(sender.id!)}>
+                          <Button variant="ghost" size="icon" aria-label="Delete sender" onClick={() => handleDelete(sender.id!)}>
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
                         </div>
@@ -264,9 +270,11 @@ export function SenderSection() {
                 </Button>
               </div>
               {previewSig ? (
-                <div
-                  className="min-h-[120px] rounded-lg border bg-card p-4"
-                  dangerouslySetInnerHTML={{ __html: form.signature }}
+                <iframe
+                  srcDoc={`<!DOCTYPE html><html><head><style>body{font-family:sans-serif;margin:8px;color:#18181b;}</style></head><body>${form.signature}</body></html>`}
+                  className="min-h-[120px] w-full rounded-lg border bg-card"
+                  title="Signature preview"
+                  sandbox=""
                 />
               ) : (
                 <Textarea

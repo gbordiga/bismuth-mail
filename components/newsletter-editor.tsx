@@ -59,15 +59,7 @@ import {
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 
-// --- Block Types ---
-type BlockType = "text" | "image" | "button" | "divider" | "html"
-
-interface EditorBlock {
-  id: string
-  type: BlockType
-  content: string // HTML for text, src for image, label for button, raw for html
-  props: Record<string, string>
-}
+import { type BlockType, type EditorBlock, blockToHtml, buildFullHtml } from "@/lib/email-builder"
 
 function generateId() {
   return Math.random().toString(36).substring(2, 9)
@@ -91,57 +83,6 @@ function createBlock(type: BlockType): EditorBlock {
     case "html":
       return { id: generateId(), type, content: "<div>\n  \n</div>", props: {} }
   }
-}
-
-// --- Block to HTML ---
-function blockToHtml(block: EditorBlock): string {
-  switch (block.type) {
-    case "text":
-      return `<div style="padding: 8px 0;">${block.content}</div>`
-    case "image":
-      if (!block.content) return `<div style="padding: 16px 0; text-align: ${block.props.align || "center"}; color: #999;">[ Image placeholder ]</div>`
-      return `<div style="padding: 8px 0; text-align: ${block.props.align || "center"};"><img src="${block.content}" alt="${block.props.alt || ""}" style="max-width: ${block.props.width || "100%"}; height: auto;" /></div>`
-    case "button":
-      return `<div style="padding: 16px 0; text-align: ${block.props.align || "center"};"><a href="${block.props.href || "#"}" style="display: inline-block; padding: 12px 28px; background-color: ${block.props.bgColor || "#3b82f6"}; color: ${block.props.textColor || "#ffffff"}; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">${block.content}</a></div>`
-    case "divider":
-      return `<hr style="border: none; border-top: ${block.props.thickness || "1"}px solid ${block.props.color || "#e5e7eb"}; margin: 16px 0;" />`
-    case "html":
-      return block.content
-  }
-}
-
-function blocksToFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeHref: string): string {
-  const body = blocks.map(blockToHtml).join("\n")
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f4f4f5; }
-  .email-wrapper { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
-  .email-body { padding: 32px 24px; }
-  .email-footer { padding: 24px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #71717a; }
-  .email-footer a { color: #71717a; text-decoration: underline; }
-  img { max-width: 100%; height: auto; }
-  p { margin: 0 0 12px 0; line-height: 1.6; color: #18181b; }
-  h1, h2, h3 { margin: 0 0 12px 0; color: #18181b; }
-  a { color: #3b82f6; }
-</style>
-</head>
-<body>
-<div class="email-wrapper">
-  <div class="email-body">
-    ${body}
-  </div>
-  ${senderSig ? `<div style="padding: 16px 24px; border-top: 1px solid #e5e7eb;">${senderSig}</div>` : ""}
-  <div class="email-footer">
-    <p>You received this email because you subscribed to our newsletter.</p>
-    <p>To unsubscribe, <a href="${unsubscribeHref}">click here to send an unsubscribe request</a>.</p>
-  </div>
-</div>
-</body>
-</html>`
 }
 
 // --- Block Editor Component ---
@@ -532,6 +473,8 @@ export function NewsletterSection() {
   }
 
   async function handleDelete(id: number) {
+    if (!window.confirm("Are you sure you want to delete this newsletter and its send logs?")) return
+    await db.sendLogs.where("newsletterId").equals(id).delete()
     await db.newsletters.delete(id)
     toast.success("Newsletter deleted")
     load()
@@ -554,7 +497,7 @@ export function NewsletterSection() {
     const sender = senders.find((s) => s.id === senderId)
     const unsubEmail = sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com"
     const mailtoHref = `mailto:${unsubEmail}?subject=UNSUBSCRIBE&body=Please%20unsubscribe%20me%20from%20this%20newsletter.`
-    const html = blocksToFullHtml(blocks, sender?.signature || "", mailtoHref)
+    const html = buildFullHtml(blocks, sender?.signature || "", mailtoHref, true)
     setPreviewHtml(html)
     setPreviewOpen(true)
   }
@@ -642,14 +585,14 @@ export function NewsletterSection() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           {nl.status === "draft" && (
-                            <Button variant="ghost" size="icon" onClick={() => openEdit(nl)}>
+                            <Button variant="ghost" size="icon" aria-label="Edit newsletter" onClick={() => openEdit(nl)}>
                               <Pencil className="size-4" />
                             </Button>
                           )}
-                          <Button variant="ghost" size="icon" onClick={() => handleDuplicate(nl)}>
+                          <Button variant="ghost" size="icon" aria-label="Duplicate newsletter" onClick={() => handleDuplicate(nl)}>
                             <Copy className="size-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(nl.id!)}>
+                          <Button variant="ghost" size="icon" aria-label="Delete newsletter" onClick={() => handleDelete(nl.id!)}>
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
                         </div>
@@ -692,7 +635,7 @@ export function NewsletterSection() {
             {editing ? "Edit" : "New"} Newsletter
           </h2>
           <p className="text-sm text-muted-foreground">
-            Build your email with drag-and-drop blocks
+            Build your email with content blocks
           </p>
         </div>
         <div className="flex items-center gap-2">

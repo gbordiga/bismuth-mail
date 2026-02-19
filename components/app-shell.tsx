@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 import {
   Mail,
@@ -11,6 +12,8 @@ import {
   Menu,
   X,
   DatabaseBackup,
+  Sun,
+  Moon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -33,6 +36,7 @@ interface AppShellProps {
 
 export function AppShell({ activeSection, onSectionChange, children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { theme, setTheme } = useTheme()
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -61,6 +65,7 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
             size="icon"
             className="ml-auto lg:hidden"
             onClick={() => setMobileOpen(false)}
+            aria-label="Close sidebar"
           >
             <X className="size-4" />
           </Button>
@@ -92,10 +97,20 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
             })}
           </ul>
         </nav>
-        <div className="border-t p-4">
+        <div className="border-t p-4 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            All data stored locally in IndexedDB
+            Stored locally in IndexedDB
           </p>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label="Toggle theme"
+          >
+            <Sun className="size-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
+            <Moon className="absolute size-4 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
+          </Button>
         </div>
       </aside>
 
@@ -107,6 +122,7 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
             size="icon"
             className="lg:hidden"
             onClick={() => setMobileOpen(true)}
+            aria-label="Open sidebar"
           >
             <Menu className="size-5" />
           </Button>
