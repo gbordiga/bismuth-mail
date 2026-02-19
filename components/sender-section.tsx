@@ -37,6 +37,7 @@ const emptySender: Omit<Sender, "id" | "createdAt"> = {
   name: "",
   email: "",
   replyTo: "",
+  unsubscribeEmail: "",
   smtpConfigId: 0,
   signature: "",
 }
@@ -74,6 +75,7 @@ export function SenderSection() {
       name: sender.name,
       email: sender.email,
       replyTo: sender.replyTo,
+      unsubscribeEmail: sender.unsubscribeEmail || "",
       smtpConfigId: sender.smtpConfigId,
       signature: sender.signature,
     })
@@ -81,8 +83,8 @@ export function SenderSection() {
   }
 
   async function handleSave() {
-    if (!form.name || !form.email || !form.smtpConfigId) {
-      toast.error("Please fill in name, email, and select an SMTP server")
+    if (!form.name || !form.email || !form.smtpConfigId || !form.unsubscribeEmail) {
+      toast.error("Please fill in name, email, unsubscribe email, and select an SMTP server")
       return
     }
     if (editingId) {
@@ -223,23 +225,36 @@ export function SenderSection() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="sender-smtp">SMTP Server *</Label>
-                <Select
-                  value={String(form.smtpConfigId)}
-                  onValueChange={(v) => setForm({ ...form, smtpConfigId: parseInt(v) })}
-                >
-                  <SelectTrigger id="sender-smtp" className="w-full">
-                    <SelectValue placeholder="Select server" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {smtpConfigs.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="sender-unsub">Unsubscribe Email *</Label>
+                <Input
+                  id="sender-unsub"
+                  type="email"
+                  placeholder="unsubscribe@company.com"
+                  value={form.unsubscribeEmail}
+                  onChange={(e) => setForm({ ...form, unsubscribeEmail: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Recipients will be prompted to send an email here to unsubscribe.
+                </p>
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sender-smtp">SMTP Server *</Label>
+              <Select
+                value={String(form.smtpConfigId)}
+                onValueChange={(v) => setForm({ ...form, smtpConfigId: parseInt(v) })}
+              >
+                <SelectTrigger id="sender-smtp" className="w-full">
+                  <SelectValue placeholder="Select server" />
+                </SelectTrigger>
+                <SelectContent>
+                  {smtpConfigs.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <div className="flex items-center justify-between">

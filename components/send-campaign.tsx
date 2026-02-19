@@ -67,7 +67,7 @@ function blockToHtml(block: EditorBlock): string {
   }
 }
 
-function buildFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeUrl: string): string {
+function buildFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeHref: string): string {
   const body = blocks.map(blockToHtml).join("\n")
   return `<!DOCTYPE html>
 <html>
@@ -94,19 +94,18 @@ function buildFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeUrl:
   ${senderSig ? `<div style="padding: 16px 24px; border-top: 1px solid #e5e7eb;">${senderSig}</div>` : ""}
   <div class="email-footer">
     <p>You received this email because you subscribed to our newsletter.</p>
-    <p><a href="${unsubscribeUrl}">Unsubscribe</a> from this list.</p>
+    <p>To unsubscribe, <a href="${unsubscribeHref}">click here to send an unsubscribe request</a>.</p>
   </div>
 </div>
 </body>
 </html>`
 }
 
-function replaceMergeFields(html: string, contact: Contact, unsubUrl: string): string {
+function replaceMergeFields(html: string, contact: Contact): string {
   let result = html
   result = result.replace(/\{\{email\}\}/g, contact.email)
   result = result.replace(/\{\{firstName\}\}/g, contact.firstName)
   result = result.replace(/\{\{lastName\}\}/g, contact.lastName)
-  result = result.replace(/\{\{unsubscribe_url\}\}/g, unsubUrl)
   // Custom fields
   if (contact.customData) {
     for (const [key, value] of Object.entries(contact.customData)) {
@@ -171,15 +170,15 @@ export function SendCampaignSection() {
     } catch {
       blocks = [{ id: "raw", type: "html", content: selectedNl.htmlContent, props: {} }]
     }
-    const baseUrl = window.location.origin
-    const html = buildFullHtml(blocks, sender?.signature || "", `${baseUrl}/unsubscribe?email={{email}}&list={{listId}}`)
+    const unsubEmail = sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com"
+    const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent("Please remove john@example.com from this newsletter.")}`
+    const html = buildFullHtml(blocks, sender?.signature || "", mailtoHref)
 
     // Replace with sample data
     const sample = html
       .replace(/\{\{email\}\}/g, "john@example.com")
       .replace(/\{\{firstName\}\}/g, "John")
       .replace(/\{\{lastName\}\}/g, "Doe")
-      .replace(/\{\{unsubscribe_url\}\}/g, "#")
     setPreviewHtml(sample)
     setPreviewOpen(true)
   }
@@ -222,8 +221,6 @@ export function SendCampaignSection() {
       blocks = [{ id: "raw", type: "html", content: selectedNl.htmlContent, props: {} }]
     }
 
-    const baseUrl = window.location.origin
-
     // Gather all contacts
     const allContacts: Contact[] = []
     for (const lid of selectedNl.listIds) {
@@ -248,13 +245,15 @@ export function SendCampaignSection() {
     let sentCount = 0
     let failedCount = 0
 
+    const unsubEmail = sender.unsubscribeEmail || sender.email
+
     for (const contact of allContacts) {
       if (abortRef.current) break
 
-      const unsubUrl = `${baseUrl}/unsubscribe?email=${encodeURIComponent(contact.email)}&listId=${contact.listId}`
-      const fullHtml = buildFullHtml(blocks, sender.signature, unsubUrl)
-      const personalizedHtml = replaceMergeFields(fullHtml, contact, unsubUrl)
-      const personalizedSubject = replaceMergeFields(selectedNl.subject, contact, unsubUrl)
+      const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this newsletter.`)}`
+      const fullHtml = buildFullHtml(blocks, sender.signature, mailtoHref)
+      const personalizedHtml = replaceMergeFields(fullHtml, contact)
+      const personalizedSubject = replaceMergeFields(selectedNl.subject, contact)
 
       try {
         const res = await fetch("/api/smtp/send", {
