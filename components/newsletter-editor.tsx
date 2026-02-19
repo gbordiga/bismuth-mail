@@ -110,7 +110,7 @@ function blockToHtml(block: EditorBlock): string {
   }
 }
 
-function blocksToFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeUrl: string): string {
+function blocksToFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeHref: string): string {
   const body = blocks.map(blockToHtml).join("\n")
   return `<!DOCTYPE html>
 <html>
@@ -137,7 +137,7 @@ function blocksToFullHtml(blocks: EditorBlock[], senderSig: string, unsubscribeU
   ${senderSig ? `<div style="padding: 16px 24px; border-top: 1px solid #e5e7eb;">${senderSig}</div>` : ""}
   <div class="email-footer">
     <p>You received this email because you subscribed to our newsletter.</p>
-    <p><a href="${unsubscribeUrl}">Unsubscribe</a> from this list.</p>
+    <p>To unsubscribe, <a href="${unsubscribeHref}">click here to send an unsubscribe request</a>.</p>
   </div>
 </div>
 </body>
@@ -552,7 +552,9 @@ export function NewsletterSection() {
 
   function showPreview() {
     const sender = senders.find((s) => s.id === senderId)
-    const html = blocksToFullHtml(blocks, sender?.signature || "", "{{unsubscribe_url}}")
+    const unsubEmail = sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com"
+    const mailtoHref = `mailto:${unsubEmail}?subject=UNSUBSCRIBE&body=Please%20unsubscribe%20me%20from%20this%20newsletter.`
+    const html = blocksToFullHtml(blocks, sender?.signature || "", mailtoHref)
     setPreviewHtml(html)
     setPreviewOpen(true)
   }

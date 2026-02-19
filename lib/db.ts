@@ -18,6 +18,7 @@ export interface Sender {
   name: string
   email: string
   replyTo: string
+  unsubscribeEmail: string // recipients send an email here to unsubscribe
   smtpConfigId: number
   signature: string // HTML
   createdAt: Date

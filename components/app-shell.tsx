@@ -10,6 +10,7 @@ import {
   Send,
   Menu,
   X,
+  DatabaseBackup,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -19,6 +20,7 @@ const navItems = [
   { id: "lists", label: "Email Lists", icon: Users },
   { id: "editor", label: "Newsletters", icon: FileEdit },
   { id: "send", label: "Send Campaign", icon: Send },
+  { id: "backup", label: "Backup", icon: DatabaseBackup },
 ] as const
 
 export type NavSection = (typeof navItems)[number]["id"]

@@ -7,6 +7,7 @@ import { SenderSection } from "@/components/sender-section"
 import { EmailListSection } from "@/components/email-list-section"
 import { NewsletterSection } from "@/components/newsletter-editor"
 import { SendCampaignSection } from "@/components/send-campaign"
+import { BackupSection } from "@/components/backup-section"
 
 export default function Home() {
   const [section, setSection] = useState<NavSection>("smtp")
@@ -18,6 +19,7 @@ export default function Home() {
       {section === "lists" && <EmailListSection />}
       {section === "editor" && <NewsletterSection />}
       {section === "send" && <SendCampaignSection />}
+      {section === "backup" && <BackupSection />}
     </AppShell>
   )
 }
