@@ -10,7 +10,7 @@ const navItems = [
   { id: "smtp", label: "SMTP Config", icon: Server },
   { id: "senders", label: "Senders", icon: Mail },
   { id: "lists", label: "Email Lists", icon: Users },
-  { id: "editor", label: "Newsletters", icon: FileEdit },
+  { id: "editor", label: "Campaigns", icon: FileEdit },
   { id: "send", label: "Send Campaign", icon: Send },
   { id: "backup", label: "Backup", icon: DatabaseBackup },
 ] as const
@@ -45,7 +45,7 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
           <div className="flex size-8 items-center justify-center rounded-lg bg-primary">
             <Mail className="size-4 text-primary-foreground" />
           </div>
-          <span className="text-base font-semibold text-foreground">Newsletter</span>
+          <span className="text-base font-semibold text-foreground">Bismuth Mail</span>
           <Button
             variant="ghost"
             size="icon"

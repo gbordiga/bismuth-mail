@@ -471,7 +471,7 @@ export function NewsletterSection() {
         senderId,
         listIds: selectedListIds,
       })
-      toast.success("Newsletter updated")
+      toast.success("Campaign updated")
     } else {
       await db.newsletters.add({
         name,
@@ -483,17 +483,17 @@ export function NewsletterSection() {
         sentAt: null,
         createdAt: new Date(),
       })
-      toast.success("Newsletter created")
+      toast.success("Campaign created")
     }
     setDialogOpen(false)
     load()
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm("Are you sure you want to delete this newsletter and its send logs?")) return
+    if (!window.confirm("Are you sure you want to delete this campaign and its send logs?")) return
     await db.sendLogs.where("newsletterId").equals(id).delete()
     await db.newsletters.delete(id)
-    toast.success("Newsletter deleted")
+    toast.success("Campaign deleted")
     load()
   }
 
@@ -506,14 +506,14 @@ export function NewsletterSection() {
       sentAt: null,
       createdAt: new Date(),
     })
-    toast.success("Newsletter duplicated")
+    toast.success("Campaign duplicated")
     load()
   }
 
   function showPreview() {
     const sender = senders.find((s) => s.id === senderId)
     const unsubEmail = sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com"
-    const mailtoHref = `mailto:${unsubEmail}?subject=UNSUBSCRIBE&body=Please%20unsubscribe%20me%20from%20this%20newsletter.`
+    const mailtoHref = `mailto:${unsubEmail}?subject=UNSUBSCRIBE&body=Please%20unsubscribe%20me%20from%20this%20mailing%20list.`
     const html = buildFullHtml(blocks, sender?.signature || "", mailtoHref, true)
     setPreviewHtml(html)
     setPreviewOpen(true)
@@ -542,12 +542,12 @@ export function NewsletterSection() {
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-foreground">Newsletters</h2>
+            <h2 className="text-xl font-semibold text-foreground">Campaigns</h2>
             <p className="text-sm text-muted-foreground">Create and manage your email campaigns</p>
           </div>
           <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" />
-            New Newsletter
+            New Campaign
           </Button>
         </div>
 
@@ -555,8 +555,8 @@ export function NewsletterSection() {
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <FileEdit className="mb-4 size-12 text-muted-foreground/40" />
-              <CardTitle className="mb-2 text-base">No newsletters yet</CardTitle>
-              <CardDescription>Create your first newsletter to start building campaigns</CardDescription>
+              <CardTitle className="mb-2 text-base">No campaigns yet</CardTitle>
+              <CardDescription>Create your first campaign to start sending emails</CardDescription>
             </CardContent>
           </Card>
         ) : (
@@ -601,7 +601,7 @@ export function NewsletterSection() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              aria-label="Edit newsletter"
+                              aria-label="Edit campaign"
                               onClick={() => openEdit(nl)}
                             >
                               <Pencil className="size-4" />
@@ -610,7 +610,7 @@ export function NewsletterSection() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="Duplicate newsletter"
+                            aria-label="Duplicate campaign"
                             onClick={() => handleDuplicate(nl)}
                           >
                             <Copy className="size-4" />
@@ -618,7 +618,7 @@ export function NewsletterSection() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label="Delete newsletter"
+                            aria-label="Delete campaign"
                             onClick={() => handleDelete(nl.id!)}
                           >
                             <Trash2 className="size-4 text-destructive" />
@@ -659,7 +659,7 @@ export function NewsletterSection() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">{editing ? "Edit" : "New"} Newsletter</h2>
+          <h2 className="text-xl font-semibold text-foreground">{editing ? "Edit" : "New"} Campaign</h2>
           <p className="text-sm text-muted-foreground">Build your email with content blocks</p>
         </div>
         <div className="flex items-center gap-2">
@@ -670,7 +670,7 @@ export function NewsletterSection() {
             <Eye className="mr-2 size-4" />
             Preview
           </Button>
-          <Button onClick={handleSave}>Save Newsletter</Button>
+          <Button onClick={handleSave}>Save Campaign</Button>
         </div>
       </div>
 
@@ -686,7 +686,7 @@ export function NewsletterSection() {
             <CardContent className="p-4">
               <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="nl-name">Newsletter Name *</Label>
+                  <Label htmlFor="nl-name">Campaign Name *</Label>
                   <Input
                     id="nl-name"
                     placeholder="e.g. January Update"

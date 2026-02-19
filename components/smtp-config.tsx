@@ -134,7 +134,7 @@ export function SmtpConfigSection() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Server className="mb-4 size-12 text-muted-foreground/40" />
             <CardTitle className="mb-2 text-base">No SMTP servers configured</CardTitle>
-            <CardDescription>Add your first SMTP server to start sending newsletters</CardDescription>
+            <CardDescription>Add your first SMTP server to start sending emails</CardDescription>
           </CardContent>
         </Card>
       ) : (

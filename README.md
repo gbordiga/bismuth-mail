@@ -1,6 +1,8 @@
-# Newsletter App
+# Bismuth Mail
 
-A self-hosted newsletter management application built with Next.js. Configure SMTP servers, manage subscriber lists, compose emails with a block-based editor, and send campaigns — all from a single interface. Data is stored locally in the browser via IndexedDB, so no external database is required.
+A self-hosted email campaign platform built with Next.js. Configure SMTP servers, manage subscriber lists, compose emails with a block-based editor, and send campaigns — all from a single interface. Data is stored locally in the browser via IndexedDB, so no external database is required.
+
+**Live:** [bismuth-mail.vercel.app](https://bismuth-mail.vercel.app)
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61dafb?logo=react)
@@ -13,8 +15,8 @@ A self-hosted newsletter management application built with Next.js. Configure SM
 - **SMTP Configuration** — Add and manage multiple SMTP servers with connection testing
 - **Sender Profiles** — Create sender identities with custom signatures and reply-to addresses
 - **Email Lists** — Organize contacts into lists with custom fields, CSV import/export
-- **Block Editor** — Compose newsletters using text, image, button, divider, and raw HTML blocks
-- **Campaign Sending** — Send newsletters to selected lists with per-recipient logging and test emails
+- **Block Editor** — Compose emails using text, image, button, divider, and raw HTML blocks
+- **Campaign Sending** — Send campaigns to selected lists with per-recipient logging and test emails
 - **Backup & Restore** — Export and import all data as JSON for portability
 - **Dark Mode** — System-aware theme toggle with light and dark modes
 - **Fully Local Storage** — All data persisted in IndexedDB via Dexie; no server-side database needed
@@ -42,7 +44,7 @@ A self-hosted newsletter management application built with Next.js. Configure SM
 
 ```bash
 git clone https://github.com/gbordiga/newsletter-app.git
-cd newsletter-app
+cd bismuth-mail
 pnpm install
 ```
 
@@ -64,7 +66,7 @@ pnpm start
 ## Project Structure
 
 ```
-newsletter-app/
+bismuth-mail/
 ├── app/
 │   ├── api/smtp/          # API routes for sending and testing emails
 │   ├── layout.tsx         # Root layout with theme provider
@@ -91,7 +93,7 @@ newsletter-app/
 1. **Configure** an SMTP server (host, port, credentials) and test the connection
 2. **Create** a sender profile linked to an SMTP configuration
 3. **Build** email lists and add contacts manually or via CSV import
-4. **Compose** a newsletter using the block editor with live preview
+4. **Compose** an email campaign using the block editor with live preview
 5. **Send** the campaign to one or more lists, with real-time delivery tracking
 
 All data stays in your browser's IndexedDB. Use the Backup section to export/import your data as JSON.

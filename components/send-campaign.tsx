@@ -99,7 +99,7 @@ export function SendCampaignSection() {
       blocks = [{ id: "raw", type: "html", content: selectedNl.htmlContent, props: {} }]
     }
     const unsubEmail = sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com"
-    const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent("Please remove john@example.com from this newsletter.")}`
+    const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent("Please remove john@example.com from this mailing list.")}`
     const html = buildFullHtml(blocks, sender?.signature || "", mailtoHref, true)
 
     // Replace with sample data
@@ -119,7 +119,7 @@ export function SendCampaignSection() {
     const smtpConfig = sender ? smtpConfigs.find((c) => c.id === sender.smtpConfigId) : null
 
     if (!sender || !smtpConfig) {
-      toast.error("No sender or SMTP config found for this newsletter")
+      toast.error("No sender or SMTP config found for this campaign")
       setSendingTest(false)
       return
     }
@@ -132,7 +132,7 @@ export function SendCampaignSection() {
     }
 
     const unsubEmail = sender.unsubscribeEmail || sender.email
-    const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${testEmailAddress.trim()} from this newsletter.`)}`
+    const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${testEmailAddress.trim()} from this mailing list.`)}`
     const fullHtml = buildFullHtml(blocks, sender.signature, mailtoHref)
     const html = fullHtml
       .replace(/\{\{email\}\}/g, testEmailAddress.trim())
@@ -199,7 +199,7 @@ export function SendCampaignSection() {
     const smtpConfig = sender ? smtpConfigs.find((c) => c.id === sender.smtpConfigId) : null
 
     if (!sender || !smtpConfig) {
-      toast.error("No sender or SMTP config found for this newsletter")
+      toast.error("No sender or SMTP config found for this campaign")
       setSending(false)
       return
     }
@@ -267,7 +267,7 @@ export function SendCampaignSection() {
 
       const batch = toSend.slice(i, i + batchSize)
       const recipients = batch.map((contact) => {
-        const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this newsletter.`)}`
+        const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this mailing list.`)}`
         const fullHtml = buildFullHtml(blocks, sender.signature, mailtoHref)
         return {
           to: contact.email,
@@ -369,7 +369,7 @@ export function SendCampaignSection() {
     if (!selectedNl) return
     await db.sendLogs.where("newsletterId").equals(selectedNl.id!).delete()
     await db.newsletters.update(selectedNl.id!, { status: "draft" })
-    toast.info("Newsletter reset to draft. All send logs cleared.")
+    toast.info("Campaign reset to draft. All send logs cleared.")
     load()
   }
 
@@ -386,20 +386,20 @@ export function SendCampaignSection() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-xl font-semibold text-foreground">Send Campaign</h2>
-        <p className="text-sm text-muted-foreground">Select a newsletter and send it to your subscribers</p>
+        <p className="text-sm text-muted-foreground">Select a campaign and send it to your subscribers</p>
       </div>
 
       <Card>
         <CardContent className="p-5">
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label>Select Newsletter</Label>
+              <Label>Select Campaign</Label>
               <Select
                 value={selectedNlId ? String(selectedNlId) : ""}
                 onValueChange={(v) => setSelectedNlId(parseInt(v))}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose a newsletter..." />
+                  <SelectValue placeholder="Choose a campaign..." />
                 </SelectTrigger>
                 <SelectContent>
                   {newsletters.map((nl) => (

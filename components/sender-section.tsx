@@ -89,7 +89,7 @@ export function SenderSection() {
   async function handleDelete(id: number) {
     const nlCount = await db.newsletters.filter((nl) => nl.senderId === id).count()
     if (nlCount > 0) {
-      toast.error(`Cannot delete: this sender is used by ${nlCount} newsletter(s)`)
+      toast.error(`Cannot delete: this sender is used by ${nlCount} campaign(s)`)
       return
     }
     if (!window.confirm("Are you sure you want to delete this sender?")) return

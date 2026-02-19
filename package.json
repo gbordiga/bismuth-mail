@@ -1,5 +1,5 @@
 {
-  "name": "newsletter-app",
+  "name": "bismuth-mail",
   "version": "0.1.0",
   "packageManager": "pnpm@10.29.1",
   "scripts": {

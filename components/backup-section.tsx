@@ -64,7 +64,7 @@ export function BackupSection() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `newsletter-backup-${new Date().toISOString().slice(0, 10)}.json`
+      a.download = `bismuth-mail-backup-${new Date().toISOString().slice(0, 10)}.json`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -149,7 +149,7 @@ export function BackupSection() {
       <div>
         <h2 className="text-xl font-semibold text-foreground">Backup & Restore</h2>
         <p className="text-sm text-muted-foreground">
-          Export or import all your data including SMTP configs, senders, lists, contacts, newsletters, and send logs
+          Export or import all your data including SMTP configs, senders, lists, contacts, campaigns, and send logs
         </p>
       </div>
 
@@ -229,7 +229,7 @@ export function BackupSection() {
                 <Badge variant="outline">Senders</Badge>
                 <Badge variant="outline">Email Lists</Badge>
                 <Badge variant="outline">Contacts</Badge>
-                <Badge variant="outline">Newsletters</Badge>
+                <Badge variant="outline">Campaigns</Badge>
                 <Badge variant="outline">Send Logs</Badge>
               </div>
             </div>
@@ -272,7 +272,7 @@ export function BackupSection() {
                   <Badge variant="secondary">{importSummary.contacts.length}</Badge>
                 </div>
                 <div className="flex items-center justify-between rounded bg-card px-3 py-1.5">
-                  <span className="text-muted-foreground">Newsletters</span>
+                  <span className="text-muted-foreground">Campaigns</span>
                   <Badge variant="secondary">{importSummary.newsletters.length}</Badge>
                 </div>
                 <div className="flex items-center justify-between rounded bg-card px-3 py-1.5">

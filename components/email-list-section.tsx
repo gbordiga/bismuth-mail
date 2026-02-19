@@ -437,7 +437,7 @@ export function EmailListSection() {
                 <Label htmlFor="list-name">List Name *</Label>
                 <Input
                   id="list-name"
-                  placeholder="e.g. Newsletter Subscribers"
+                  placeholder="e.g. Subscribers"
                   value={listForm.name}
                   onChange={(e) => setListForm({ ...listForm, name: e.target.value })}
                 />

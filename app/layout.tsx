@@ -9,8 +9,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains" })
 
 export const metadata: Metadata = {
-  title: "Newsletter Manager",
-  description: "Complete newsletter management module with SMTP, lists, and campaigns",
+  metadataBase: new URL("https://bismuth-mail.vercel.app"),
+  title: "Bismuth Mail",
+  description: "Self-hosted email platform — SMTP, subscriber lists, block editor, and campaigns",
 }
 
 export default function RootLayout({
