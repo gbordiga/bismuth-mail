@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import nodemailer from "nodemailer"
 import { smtpSendBatchSchema } from "@/lib/validations"
+import { buildFullHtml, type EditorBlock } from "@/lib/email-builder"
+
+export const maxDuration = 300
 
 const TRANSIENT_CODES = new Set(["ECONNECTION", "ETIMEDOUT", "ESOCKET", "EENVELOPE"])
 
@@ -16,6 +19,30 @@ function isTransientError(err: unknown): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+}
+
+interface ContactData {
+  email: string
+  firstName: string
+  lastName: string
+  customData?: Record<string, string>
+}
+
+function replaceMergeFields(html: string, contact: ContactData): string {
+  let result = html
+  result = result.replace(/\{\{email\}\}/g, escapeHtml(contact.email))
+  result = result.replace(/\{\{firstName\}\}/g, escapeHtml(contact.firstName))
+  result = result.replace(/\{\{lastName\}\}/g, escapeHtml(contact.lastName))
+  if (contact.customData) {
+    for (const [key, value] of Object.entries(contact.customData)) {
+      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), escapeHtml(value || ""))
+    }
+  }
+  return result
 }
 
 type SendResult = { email: string; status: "sent" | "failed"; attempts: number; error?: string }
@@ -54,7 +81,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { smtp, from, replyTo, recipients, delayMs, maxRetries, maxConnections } = parsed.data
+    const { smtp, from, replyTo, subjectTemplate, blocks, signature, unsubscribeEmail, contacts, delayMs, maxRetries, maxConnections } = parsed.data
     const safeName = from.name.replace(/["\\\r\n]/g, "")
     const fromHeader = `"${safeName}" <${from.email}>`
     const replyToHeader = replyTo || from.email
@@ -72,14 +99,19 @@ export async function POST(req: Request) {
       socketTimeout: 30000,
     })
 
-    const promises = recipients.map(async (r, i) => {
-      // Stagger starts when throttling is configured
+    const promises = contacts.map(async (contact, i) => {
       if (delayMs > 0 && i > 0) {
         await sleep(delayMs * i)
       }
+
+      const mailtoHref = `mailto:${unsubscribeEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this mailing list.`)}`
+      const fullHtml = buildFullHtml(blocks as EditorBlock[], signature, mailtoHref)
+      const subject = replaceMergeFields(subjectTemplate, contact)
+      const html = replaceMergeFields(fullHtml, contact)
+
       return sendWithRetry(
         transporter,
-        { from: fromHeader, replyTo: replyToHeader, to: r.to, subject: r.subject, html: r.html },
+        { from: fromHeader, replyTo: replyToHeader, to: contact.email, subject, html },
         maxRetries,
       )
     })

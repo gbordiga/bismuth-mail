@@ -78,17 +78,21 @@ describe("smtpSendBatchSchema", () => {
   const valid = {
     smtp: { host: "smtp.example.com", port: 587, secure: true, auth: { user: "u", pass: "p" } },
     from: { name: "Newsletter", email: "news@example.com" },
-    recipients: [{ to: "a@example.com", subject: "Hi", html: "<p>Body</p>" }],
+    subjectTemplate: "Hello {{firstName}}",
+    blocks: [{ id: "1", type: "text" as const, content: "<p>Hi</p>", props: {} }],
+    signature: "",
+    unsubscribeEmail: "unsub@example.com",
+    contacts: [{ email: "a@example.com", firstName: "Alice", lastName: "Smith" }],
   }
 
   it("accepts a valid batch request", () => {
     expect(smtpSendBatchSchema.safeParse(valid).success).toBe(true)
   })
 
-  it("applies default delayMs of 200", () => {
+  it("applies default delayMs of 0", () => {
     const result = smtpSendBatchSchema.safeParse(valid)
     expect(result.success).toBe(true)
-    if (result.success) expect(result.data.delayMs).toBe(200)
+    if (result.success) expect(result.data.delayMs).toBe(0)
   })
 
   it("applies default maxRetries of 2", () => {
@@ -97,17 +101,31 @@ describe("smtpSendBatchSchema", () => {
     if (result.success) expect(result.data.maxRetries).toBe(2)
   })
 
-  it("rejects empty recipients array", () => {
-    expect(smtpSendBatchSchema.safeParse({ ...valid, recipients: [] }).success).toBe(false)
+  it("rejects empty contacts array", () => {
+    expect(smtpSendBatchSchema.safeParse({ ...valid, contacts: [] }).success).toBe(false)
   })
 
-  it("rejects more than 50 recipients", () => {
-    const recipients = Array.from({ length: 51 }, (_, i) => ({
-      to: `user${i}@example.com`,
-      subject: "Hi",
-      html: "<p>Body</p>",
+  it("rejects more than 500 contacts", () => {
+    const contacts = Array.from({ length: 501 }, (_, i) => ({
+      email: `user${i}@example.com`,
+      firstName: "User",
+      lastName: `${i}`,
     }))
-    expect(smtpSendBatchSchema.safeParse({ ...valid, recipients }).success).toBe(false)
+    expect(smtpSendBatchSchema.safeParse({ ...valid, contacts }).success).toBe(false)
+  })
+
+  it("accepts contacts with customData", () => {
+    const data = { ...valid, contacts: [{ email: "a@example.com", firstName: "A", lastName: "B", customData: { company: "Acme" } }] }
+    const result = smtpSendBatchSchema.safeParse(data)
+    expect(result.success).toBe(true)
+  })
+
+  it("rejects empty blocks array", () => {
+    expect(smtpSendBatchSchema.safeParse({ ...valid, blocks: [] }).success).toBe(false)
+  })
+
+  it("rejects empty subjectTemplate", () => {
+    expect(smtpSendBatchSchema.safeParse({ ...valid, subjectTemplate: "" }).success).toBe(false)
   })
 
   it("rejects delayMs above 10000", () => {

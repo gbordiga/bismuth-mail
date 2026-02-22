@@ -2,24 +2,26 @@
 
 import { createContext, useContext, useState, useRef, useCallback, useEffect, type ReactNode } from "react"
 import { db, type Contact } from "@/lib/db"
-import { type EditorBlock, buildFullHtml } from "@/lib/email-builder"
+import { type EditorBlock } from "@/lib/email-builder"
 import { toast } from "sonner"
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-}
+function computeMaxBatchSize(maxConnections: number, delayMs: number): number {
+  const TIME_BUDGET_MS = 240_000
+  const AVG_TIME_PER_EMAIL_MS = 500
+  const RETRY_FACTOR = 1.5
 
-function replaceMergeFields(html: string, contact: Contact): string {
-  let result = html
-  result = result.replace(/\{\{email\}\}/g, escapeHtml(contact.email))
-  result = result.replace(/\{\{firstName\}\}/g, escapeHtml(contact.firstName))
-  result = result.replace(/\{\{lastName\}\}/g, escapeHtml(contact.lastName))
-  if (contact.customData) {
-    for (const [key, value] of Object.entries(contact.customData)) {
-      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), escapeHtml(value || ""))
-    }
+  let byTime: number
+  if (delayMs > 0) {
+    byTime = Math.floor(
+      (TIME_BUDGET_MS - AVG_TIME_PER_EMAIL_MS * RETRY_FACTOR) / delayMs
+    ) + 1
+  } else {
+    byTime = Math.floor(
+      TIME_BUDGET_MS * maxConnections / (AVG_TIME_PER_EMAIL_MS * RETRY_FACTOR)
+    )
   }
-  return result
+
+  return Math.min(Math.max(byTime, 10), 500)
 }
 
 export interface SendProgress {
@@ -216,9 +218,9 @@ export function SendingProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const batchSize = smtpConfig.batchSize ?? 50
     const delayMs = smtpConfig.delayMs ?? 0
     const maxConnections = smtpConfig.maxConnections ?? 5
+    const batchSize = computeMaxBatchSize(maxConnections, delayMs)
     const unsubEmail = sender.unsubscribeEmail || sender.email
 
     sendStartTimeRef.current = Date.now()
@@ -238,15 +240,12 @@ export function SendingProvider({ children }: { children: ReactNode }) {
       if (abortRef.current) break
 
       const batch = toSend.slice(i, i + batchSize)
-      const recipients = batch.map((contact) => {
-        const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this mailing list.`)}`
-        const fullHtml = buildFullHtml(blocks, sender.signature, mailtoHref)
-        return {
-          to: contact.email,
-          subject: replaceMergeFields(newsletter.subject, contact),
-          html: replaceMergeFields(fullHtml, contact),
-        }
-      })
+      const contacts = batch.map((c) => ({
+        email: c.email,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        customData: c.customData,
+      }))
 
       try {
         const batchController = new AbortController()
@@ -265,7 +264,11 @@ export function SendingProvider({ children }: { children: ReactNode }) {
             },
             from: { name: sender.name, email: sender.email },
             replyTo: sender.replyTo || sender.email,
-            recipients,
+            subjectTemplate: newsletter.subject,
+            blocks,
+            signature: sender.signature,
+            unsubscribeEmail: unsubEmail,
+            contacts,
             delayMs,
             maxRetries: 2,
             maxConnections,

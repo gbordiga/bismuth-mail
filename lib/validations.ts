@@ -28,6 +28,13 @@ export const smtpSendSchema = z.object({
   html: z.string().min(1).max(5_000_000),
 })
 
+const editorBlockSchema = z.object({
+  id: z.string(),
+  type: z.enum(["text", "image", "button", "divider", "html"]),
+  content: z.string().max(50_000),
+  props: z.record(z.string()),
+})
+
 export const smtpSendBatchSchema = z.object({
   smtp: z.object({
     host: z.string().min(1),
@@ -43,14 +50,19 @@ export const smtpSendBatchSchema = z.object({
     email: z.string().email(),
   }),
   replyTo: z.string().email().optional().or(z.literal("")),
-  recipients: z.array(
+  subjectTemplate: z.string().min(1).max(998),
+  blocks: z.array(editorBlockSchema).min(1),
+  signature: z.string().max(10_000).default(""),
+  unsubscribeEmail: z.string().email(),
+  contacts: z.array(
     z.object({
-      to: z.string().email(),
-      subject: z.string().min(1).max(998),
-      html: z.string().min(1).max(5_000_000),
+      email: z.string().email(),
+      firstName: z.string(),
+      lastName: z.string(),
+      customData: z.record(z.string()).optional(),
     })
-  ).min(1).max(50),
-  delayMs: z.coerce.number().int().min(0).max(10_000).default(200),
+  ).min(1).max(500),
+  delayMs: z.coerce.number().int().min(0).max(10_000).default(0),
   maxRetries: z.coerce.number().int().min(0).max(5).default(2),
   maxConnections: z.coerce.number().int().min(1).max(20).default(5),
 })
