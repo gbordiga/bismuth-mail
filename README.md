@@ -12,11 +12,12 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 
 ## Features
 
-- **SMTP Configuration** — Add and manage multiple SMTP servers with connection testing
+- **SMTP Configuration** — Add and manage multiple SMTP servers with connection testing, tunable batch size, delay, and max connections
 - **Sender Profiles** — Create sender identities with custom signatures and reply-to addresses
 - **Email Lists** — Organize contacts into lists with custom fields, CSV import/export
 - **Block Editor** — Compose emails using text, image, button, divider, and raw HTML blocks
-- **Campaign Sending** — Send campaigns to selected lists with per-recipient logging and test emails
+- **Merge Fields** — Use `{{field}}` placeholders in subject and body, resolved per-contact from list custom fields
+- **Campaign Sending** — Send campaigns to selected lists with real-time progress tracking, automatic retries, and test emails
 - **Backup & Restore** — Export and import all data as JSON for portability
 - **Dark Mode** — System-aware theme toggle with light and dark modes
 - **Fully Local Storage** — All data persisted in IndexedDB via Dexie; no server-side database needed
@@ -43,7 +44,7 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 ### Installation
 
 ```bash
-git clone https://github.com/gbordiga/newsletter-app.git
+git clone https://github.com/gbordiga/bismuth-mail.git
 cd bismuth-mail
 pnpm install
 ```
@@ -97,6 +98,10 @@ bismuth-mail/
 5. **Send** the campaign to one or more lists, with real-time delivery tracking
 
 All data stays in your browser's IndexedDB. Use the Backup section to export/import your data as JSON.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes between versions.
 
 ## Contributing
 

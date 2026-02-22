@@ -130,7 +130,10 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
           )}
         </nav>
         <div className="border-t p-4 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">Stored locally in IndexedDB</p>
+          <div>
+            <p className="text-xs text-muted-foreground">Stored locally in IndexedDB</p>
+            <p className="text-[10px] text-muted-foreground/60">v{process.env.NEXT_PUBLIC_APP_VERSION}</p>
+          </div>
           <Button
             variant="ghost"
             size="icon"
