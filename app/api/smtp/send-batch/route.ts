@@ -18,6 +18,31 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+type SendResult = { email: string; status: "sent" | "failed"; attempts: number; error?: string }
+
+async function sendWithRetry(
+  transporter: nodemailer.Transporter,
+  mail: { from: string; replyTo: string; to: string; subject: string; html: string },
+  maxRetries: number,
+): Promise<SendResult> {
+  let lastError = ""
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await transporter.sendMail(mail)
+      return { email: mail.to, status: "sent", attempts: attempt + 1 }
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err.message : "Unknown error"
+      if (lastError.length > 200) lastError = lastError.slice(0, 200) + "..."
+      if (attempt < maxRetries && isTransientError(err)) {
+        await sleep(Math.pow(2, attempt) * 1000)
+      } else {
+        break
+      }
+    }
+  }
+  return { email: mail.to, status: "failed", attempts: maxRetries + 1, error: lastError }
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()
@@ -29,7 +54,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const { smtp, from, replyTo, recipients, delayMs, maxRetries } = parsed.data
+    const { smtp, from, replyTo, recipients, delayMs, maxRetries, maxConnections } = parsed.data
     const safeName = from.name.replace(/["\\\r\n]/g, "")
     const fromHeader = `"${safeName}" <${from.email}>`
     const replyToHeader = replyTo || from.email
@@ -40,56 +65,26 @@ export async function POST(req: Request) {
       secure: smtp.secure,
       auth: smtp.auth,
       pool: true,
-      maxConnections: 3,
+      maxConnections,
       maxMessages: Infinity,
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 30000,
     })
 
-    const results: { email: string; status: "sent" | "failed"; attempts: number; error?: string }[] = []
-
-    for (let i = 0; i < recipients.length; i++) {
-      const r = recipients[i]
-      let lastError = ""
-      let sent = false
-      let attempts = 0
-
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        attempts = attempt + 1
-        try {
-          await transporter.sendMail({
-            from: fromHeader,
-            replyTo: replyToHeader,
-            to: r.to,
-            subject: r.subject,
-            html: r.html,
-          })
-          sent = true
-          break
-        } catch (err: unknown) {
-          lastError = err instanceof Error ? err.message : "Unknown error"
-          if (lastError.length > 200) lastError = lastError.slice(0, 200) + "..."
-
-          if (attempt < maxRetries && isTransientError(err)) {
-            await sleep(Math.pow(2, attempt) * 1000)
-          } else {
-            break
-          }
-        }
+    const promises = recipients.map(async (r, i) => {
+      // Stagger starts when throttling is configured
+      if (delayMs > 0 && i > 0) {
+        await sleep(delayMs * i)
       }
-
-      results.push(
-        sent
-          ? { email: r.to, status: "sent", attempts }
-          : { email: r.to, status: "failed", attempts, error: lastError },
+      return sendWithRetry(
+        transporter,
+        { from: fromHeader, replyTo: replyToHeader, to: r.to, subject: r.subject, html: r.html },
+        maxRetries,
       )
+    })
 
-      if (i < recipients.length - 1 && delayMs > 0) {
-        await sleep(delayMs)
-      }
-    }
-
+    const results = await Promise.all(promises)
     transporter.close()
     return NextResponse.json({ success: true, results })
   } catch (error: unknown) {

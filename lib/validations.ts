@@ -49,7 +49,8 @@ export const smtpSendBatchSchema = z.object({
       subject: z.string().min(1).max(998),
       html: z.string().min(1).max(5_000_000),
     })
-  ).min(1).max(50),
-  delayMs: z.coerce.number().int().min(0).max(10_000).default(200),
+  ).min(1).max(100),
+  delayMs: z.coerce.number().int().min(0).max(10_000).default(0),
   maxRetries: z.coerce.number().int().min(0).max(5).default(2),
+  maxConnections: z.coerce.number().int().min(1).max(20).default(5),
 })

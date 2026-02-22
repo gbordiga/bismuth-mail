@@ -12,6 +12,7 @@ export interface SmtpConfig {
   password: string
   delayMs: number
   batchSize: number
+  maxConnections: number
   createdAt: Date
 }
 
@@ -104,6 +105,21 @@ db.version(2).stores({
   return tx.table("smtpConfigs").toCollection().modify(config => {
     if (config.delayMs === undefined) config.delayMs = 200
     if (config.batchSize === undefined) config.batchSize = 10
+  })
+})
+
+db.version(3).stores({
+  smtpConfigs: "++id, name, createdAt",
+  senders: "++id, name, email, smtpConfigId, createdAt",
+  emailLists: "++id, name, createdAt",
+  contacts: "++id, listId, email, subscribedAt, unsubscribed",
+  newsletters: "++id, name, status, createdAt",
+  sendLogs: "++id, newsletterId, contactEmail, status",
+}).upgrade(tx => {
+  return tx.table("smtpConfigs").toCollection().modify(config => {
+    if (config.maxConnections === undefined) config.maxConnections = 5
+    if (config.batchSize !== undefined && config.batchSize <= 10) config.batchSize = 50
+    if (config.delayMs !== undefined && config.delayMs >= 200) config.delayMs = 0
   })
 })
 

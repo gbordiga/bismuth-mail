@@ -27,8 +27,9 @@ const emptyConfig: Omit<SmtpConfig, "id" | "createdAt"> = {
   secure: false,
   username: "",
   password: "",
-  delayMs: 200,
-  batchSize: 10,
+  delayMs: 0,
+  batchSize: 50,
+  maxConnections: 5,
 }
 
 export function SmtpConfigSection() {
@@ -62,8 +63,9 @@ export function SmtpConfigSection() {
       secure: config.secure,
       username: config.username,
       password: config.password,
-      delayMs: config.delayMs ?? 200,
-      batchSize: config.batchSize ?? 10,
+      delayMs: config.delayMs ?? 0,
+      batchSize: config.batchSize ?? 50,
+      maxConnections: config.maxConnections ?? 5,
     })
     setDialogOpen(true)
   }
@@ -261,34 +263,51 @@ export function SmtpConfigSection() {
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="smtp-delay">Delay between emails (ms)</Label>
-                <Input
-                  id="smtp-delay"
-                  type="number"
-                  min={0}
-                  max={10000}
-                  value={form.delayMs}
-                  onChange={(e) => setForm({ ...form, delayMs: parseInt(e.target.value) || 0 })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Throttle to avoid SMTP rate limits. 200ms is a safe default.
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="smtp-batch">Batch size</Label>
-                <Input
-                  id="smtp-batch"
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={form.batchSize}
-                  onChange={(e) => setForm({ ...form, batchSize: Math.min(50, Math.max(1, parseInt(e.target.value) || 1)) })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Emails per API call. Keep low (5-10) on Vercel Hobby, up to 30-50 on Pro.
-                </p>
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <h4 className="mb-3 text-sm font-medium text-foreground">Performance Settings</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="smtp-connections">Connections</Label>
+                  <Input
+                    id="smtp-connections"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={form.maxConnections}
+                    onChange={(e) => setForm({ ...form, maxConnections: Math.min(20, Math.max(1, parseInt(e.target.value) || 5)) })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Parallel SMTP connections. Higher = faster. Most providers allow 5-10.
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="smtp-batch">Batch size</Label>
+                  <Input
+                    id="smtp-batch"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={form.batchSize}
+                    onChange={(e) => setForm({ ...form, batchSize: Math.min(100, Math.max(1, parseInt(e.target.value) || 50)) })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Emails per API call. 50 is a good default. Use 10-20 on Vercel Hobby (10s timeout).
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="smtp-delay">Delay (ms)</Label>
+                  <Input
+                    id="smtp-delay"
+                    type="number"
+                    min={0}
+                    max={10000}
+                    value={form.delayMs}
+                    onChange={(e) => setForm({ ...form, delayMs: parseInt(e.target.value) || 0 })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Stagger between email starts. Set 0 for max speed, increase if you hit rate limits.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

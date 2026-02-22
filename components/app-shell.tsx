@@ -3,8 +3,10 @@
 import { useState } from "react"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
-import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon } from "lucide-react"
+import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Progress } from "@/components/ui/progress"
+import { useSending } from "@/lib/sending-context"
 
 const navItems = [
   { id: "smtp", label: "SMTP Config", icon: Server },
@@ -26,6 +28,11 @@ interface AppShellProps {
 export function AppShell({ activeSection, onSectionChange, children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const { theme, setTheme } = useTheme()
+  const { sending, phase, sendProgress } = useSending()
+
+  const progressPct = sendProgress.total > 0
+    ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100
+    : 0
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -77,11 +84,50 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
                   >
                     <Icon className="size-4 shrink-0" />
                     {item.label}
+                    {item.id === "send" && sending && (
+                      <span className="ml-auto size-2 shrink-0 rounded-full bg-primary animate-pulse" />
+                    )}
                   </button>
                 </li>
               )
             })}
           </ul>
+
+          {sending && (
+            <button
+              onClick={() => {
+                onSectionChange("send")
+                setMobileOpen(false)
+              }}
+              className="mt-3 w-full rounded-lg border bg-muted/30 p-3 text-left transition-colors hover:bg-muted/50"
+            >
+              <div className="flex items-center gap-2 text-xs mb-1.5">
+                <Loader2 className="size-3 animate-spin text-primary" />
+                <span className="font-medium text-foreground">
+                  {phase === "preparing" && "Preparing..."}
+                  {phase === "checking-smtp" && "Checking SMTP..."}
+                  {phase === "sending" && "Sending..."}
+                  {phase === "finishing" && "Finishing..."}
+                </span>
+              </div>
+              {(phase === "sending" || phase === "finishing") && (
+                <>
+                  <Progress value={progressPct} className="h-1.5 mb-1" />
+                  <div className="text-[11px] text-muted-foreground">
+                    {sendProgress.sent} / {sendProgress.total} sent
+                    {sendProgress.failed > 0 && (
+                      <span className="text-destructive"> · {sendProgress.failed} failed</span>
+                    )}
+                  </div>
+                </>
+              )}
+              {phase === "checking-smtp" && (
+                <div className="text-[11px] text-muted-foreground">
+                  Verifying SMTP connection...
+                </div>
+              )}
+            </button>
+          )}
         </nav>
         <div className="border-t p-4 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">Stored locally in IndexedDB</p>

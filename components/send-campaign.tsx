@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { db, type Newsletter, type Sender, type EmailList, type Contact, type SmtpConfig, type SendLog } from "@/lib/db"
+import { useState, useEffect, useCallback } from "react"
+import { db, type Newsletter, type Sender, type EmailList, type SmtpConfig, type SendLog } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -18,26 +18,67 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Send, Eye, AlertTriangle, CheckCircle2, XCircle, Clock, Loader2, Mail } from "lucide-react"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Send, Eye, AlertTriangle, CheckCircle2, XCircle, Clock, Loader2, Mail, ChevronDown, Zap, Wrench } from "lucide-react"
 import { toast } from "sonner"
+import { useSending } from "@/lib/sending-context"
 
 import { type EditorBlock, buildFullHtml } from "@/lib/email-builder"
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+interface ErrorDiagnostic {
+  category: string
+  count: number
+  suggestion: string
+  severity: "warning" | "error"
 }
 
-function replaceMergeFields(html: string, contact: Contact): string {
-  let result = html
-  result = result.replace(/\{\{email\}\}/g, escapeHtml(contact.email))
-  result = result.replace(/\{\{firstName\}\}/g, escapeHtml(contact.firstName))
-  result = result.replace(/\{\{lastName\}\}/g, escapeHtml(contact.lastName))
-  if (contact.customData) {
-    for (const [key, value] of Object.entries(contact.customData)) {
-      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), escapeHtml(value || ""))
+function diagnoseErrors(logs: SendLog[]): ErrorDiagnostic[] {
+  const failed = logs.filter((l) => l.status === "failed" && l.error)
+  if (failed.length === 0) return []
+
+  const categories: Record<string, { count: number; suggestion: string; severity: "warning" | "error" }> = {}
+
+  for (const log of failed) {
+    const err = (log.error || "").toLowerCase()
+
+    if (/auth|535|534|login|credential/i.test(err)) {
+      const key = "Authentication failed"
+      categories[key] = categories[key] || { count: 0, suggestion: "Check your SMTP username and password. If using Gmail/Outlook, you need an App Password (not your account password).", severity: "error" }
+      categories[key].count++
+    } else if (/421|450|too many|rate|throttl/i.test(err)) {
+      const key = "Rate limited by server"
+      categories[key] = categories[key] || { count: 0, suggestion: "Your SMTP server is throttling sends. Increase the 'Delay' setting (try 100-500ms) and reduce 'Connections' (try 2-3).", severity: "warning" }
+      categories[key].count++
+    } else if (/econnection|econnrefused|econnreset|etimedout|timeout/i.test(err)) {
+      const key = "Connection error"
+      categories[key] = categories[key] || { count: 0, suggestion: "Cannot connect to the SMTP server. Verify host and port are correct, and check your firewall or network. Try testing the connection first.", severity: "error" }
+      categories[key].count++
+    } else if (/certificate|tls|starttls|ssl/i.test(err)) {
+      const key = "TLS/SSL error"
+      categories[key] = categories[key] || { count: 0, suggestion: "TLS handshake failed. Try toggling the TLS setting in your SMTP config, or switch between ports 587 (STARTTLS) and 465 (TLS).", severity: "error" }
+      categories[key].count++
+    } else if (/550|553|mailbox|user unknown|recipient|does not exist/i.test(err)) {
+      const key = "Invalid recipient"
+      categories[key] = categories[key] || { count: 0, suggestion: "Some email addresses are invalid or the recipient's mailbox doesn't exist. Remove these contacts from your list.", severity: "warning" }
+      categories[key].count++
+    } else if (/452|quota|storage|disk/i.test(err)) {
+      const key = "Server quota exceeded"
+      categories[key] = categories[key] || { count: 0, suggestion: "Your SMTP server's sending quota is full. Wait and try again later, or contact your email provider to increase limits.", severity: "error" }
+      categories[key].count++
+    } else if (/epipe|esocket|socket/i.test(err)) {
+      const key = "Connection dropped"
+      categories[key] = categories[key] || { count: 0, suggestion: "The connection was dropped mid-send. This is usually transient — the retry mechanism should handle it. If persistent, reduce 'Connections' to 2-3.", severity: "warning" }
+      categories[key].count++
+    } else {
+      const key = "Other error"
+      categories[key] = categories[key] || { count: 0, suggestion: "Check the error details in the send log below for more information.", severity: "warning" }
+      categories[key].count++
     }
   }
-  return result
+
+  return Object.entries(categories)
+    .map(([category, v]) => ({ category, ...v }))
+    .sort((a, b) => b.count - a.count)
 }
 
 export function SendCampaignSection() {
@@ -48,9 +89,6 @@ export function SendCampaignSection() {
   const [selectedNlId, setSelectedNlId] = useState<number | null>(null)
   const [sendLogs, setSendLogs] = useState<SendLog[]>([])
 
-  // Send state
-  const [sending, setSending] = useState(false)
-  const [sendProgress, setSendProgress] = useState({ total: 0, sent: 0, failed: 0 })
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewHtml, setPreviewHtml] = useState("")
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -59,7 +97,9 @@ export function SendCampaignSection() {
   const [testEmailAddress, setTestEmailAddress] = useState("")
   const [sendingTest, setSendingTest] = useState(false)
 
-  const abortRef = useRef(false)
+  const { sending, phase, activeNewsletterId, sendProgress, sendSpeed, startSend, abortSend } = useSending()
+
+  const isThisCampaignSending = sending && activeNewsletterId === selectedNlId
 
   const load = useCallback(async () => {
     const [allNl, allSenders, allSmtp, allLists] = await Promise.all([
@@ -78,7 +118,14 @@ export function SendCampaignSection() {
     load()
   }, [load])
 
-  // Load send logs for selected newsletter
+  // Reload data when sending finishes
+  useEffect(() => {
+    if (!sending) {
+      load()
+    }
+  }, [sending, load])
+
+  // Load send logs for selected newsletter, refresh as progress updates
   useEffect(() => {
     if (selectedNlId) {
       db.sendLogs.where("newsletterId").equals(selectedNlId).toArray().then(setSendLogs)
@@ -86,6 +133,13 @@ export function SendCampaignSection() {
       setSendLogs([])
     }
   }, [selectedNlId, sendProgress])
+
+  // Auto-select the campaign being sent when mounting
+  useEffect(() => {
+    if (sending && activeNewsletterId && !selectedNlId) {
+      setSelectedNlId(activeNewsletterId)
+    }
+  }, [sending, activeNewsletterId, selectedNlId])
 
   const selectedNl = newsletters.find((n) => n.id === selectedNlId)
 
@@ -102,7 +156,6 @@ export function SendCampaignSection() {
     const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent("Please remove john@example.com from this mailing list.")}`
     const html = buildFullHtml(blocks, sender?.signature || "", mailtoHref, true)
 
-    // Replace with sample data
     const sample = html
       .replace(/\{\{email\}\}/g, "john@example.com")
       .replace(/\{\{firstName\}\}/g, "John")
@@ -189,180 +242,10 @@ export function SendCampaignSection() {
     setConfirmOpen(true)
   }
 
-  async function handleSend() {
-    if (!selectedNl) return
+  async function handleConfirmSend() {
+    if (!selectedNl?.id) return
     setConfirmOpen(false)
-    setSending(true)
-    abortRef.current = false
-
-    const sender = senders.find((s) => s.id === selectedNl.senderId)
-    const smtpConfig = sender ? smtpConfigs.find((c) => c.id === sender.smtpConfigId) : null
-
-    if (!sender || !smtpConfig) {
-      toast.error("No sender or SMTP config found for this campaign")
-      setSending(false)
-      return
-    }
-
-    let blocks: EditorBlock[]
-    try {
-      blocks = JSON.parse(selectedNl.htmlContent)
-    } catch {
-      blocks = [{ id: "raw", type: "html", content: selectedNl.htmlContent, props: {} }]
-    }
-
-    // Gather all contacts (deduplicate by email)
-    const allContacts: Contact[] = []
-    const seenEmails = new Set<string>()
-    for (const lid of selectedNl.listIds) {
-      const contactsInList = await db.contacts
-        .where("listId")
-        .equals(lid)
-        .filter((c) => !c.unsubscribed)
-        .toArray()
-      for (const c of contactsInList) {
-        if (!seenEmails.has(c.email)) {
-          seenEmails.add(c.email)
-          allContacts.push(c)
-        }
-      }
-    }
-
-    if (allContacts.length === 0) {
-      toast.error("No active recipients found in the selected lists")
-      setSending(false)
-      return
-    }
-
-    // Resume: load existing logs and skip already-sent emails
-    const existingLogs = await db.sendLogs
-      .where("newsletterId")
-      .equals(selectedNl.id!)
-      .toArray()
-    const alreadySent = new Set(
-      existingLogs.filter((l) => l.status === "sent").map((l) => l.contactEmail),
-    )
-    const toSend = allContacts.filter((c) => !alreadySent.has(c.email))
-
-    await db.newsletters.update(selectedNl.id!, { status: "sending" })
-
-    let sentCount = alreadySent.size
-    let failedCount = existingLogs.filter((l) => l.status === "failed").length
-    setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
-
-    if (toSend.length === 0) {
-      await db.newsletters.update(selectedNl.id!, { status: "sent", sentAt: new Date() })
-      setSending(false)
-      toast.success("All emails were already sent.")
-      load()
-      return
-    }
-
-    const batchSize = smtpConfig.batchSize ?? 10
-    const delayMs = smtpConfig.delayMs ?? 200
-    const unsubEmail = sender.unsubscribeEmail || sender.email
-
-    for (let i = 0; i < toSend.length; i += batchSize) {
-      if (abortRef.current) break
-
-      const batch = toSend.slice(i, i + batchSize)
-      const recipients = batch.map((contact) => {
-        const mailtoHref = `mailto:${unsubEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this mailing list.`)}`
-        const fullHtml = buildFullHtml(blocks, sender.signature, mailtoHref)
-        return {
-          to: contact.email,
-          subject: replaceMergeFields(selectedNl.subject, contact),
-          html: replaceMergeFields(fullHtml, contact),
-        }
-      })
-
-      try {
-        const res = await fetch("/api/smtp/send-batch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            smtp: {
-              host: smtpConfig.host,
-              port: smtpConfig.port,
-              secure: smtpConfig.secure,
-              auth: { user: smtpConfig.username, pass: smtpConfig.password },
-            },
-            from: { name: sender.name, email: sender.email },
-            replyTo: sender.replyTo || sender.email,
-            recipients,
-            delayMs,
-            maxRetries: 2,
-          }),
-        })
-
-        const data = await res.json()
-        if (data.results) {
-          for (const r of data.results as { email: string; status: "sent" | "failed"; attempts: number; error?: string }[]) {
-            const contact = batch.find((c) => c.email === r.email)
-            const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : r.email
-            if (r.status === "sent") {
-              sentCount++
-            } else {
-              failedCount++
-            }
-            await db.sendLogs.add({
-              newsletterId: selectedNl.id!,
-              contactEmail: r.email,
-              contactName,
-              status: r.status,
-              attempt: r.attempts,
-              error: r.error,
-              sentAt: new Date(),
-            })
-          }
-        } else {
-          for (const contact of batch) {
-            failedCount++
-            await db.sendLogs.add({
-              newsletterId: selectedNl.id!,
-              contactEmail: contact.email,
-              contactName: `${contact.firstName} ${contact.lastName}`.trim(),
-              status: "failed",
-              attempt: 1,
-              error: data.error || "Batch request failed",
-              sentAt: new Date(),
-            })
-          }
-        }
-      } catch (err) {
-        for (const contact of batch) {
-          failedCount++
-          await db.sendLogs.add({
-            newsletterId: selectedNl.id!,
-            contactEmail: contact.email,
-            contactName: `${contact.firstName} ${contact.lastName}`.trim(),
-            status: "failed",
-            attempt: 1,
-            error: String(err),
-            sentAt: new Date(),
-          })
-        }
-      }
-
-      setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
-
-      if (i + batchSize < toSend.length && !abortRef.current) {
-        await new Promise((r) => setTimeout(r, 1000))
-      }
-    }
-
-    if (abortRef.current) {
-      await db.newsletters.update(selectedNl.id!, { status: "sending" })
-      setSending(false)
-      toast.info(
-        `Campaign paused. ${sentCount} delivered, ${failedCount} failed, ${allContacts.length - sentCount - failedCount} remaining. You can resume later.`,
-      )
-    } else {
-      await db.newsletters.update(selectedNl.id!, { status: "sent", sentAt: new Date() })
-      setSending(false)
-      toast.success(`Campaign sent! ${sentCount} delivered, ${failedCount} failed.`)
-    }
-    load()
+    startSend(selectedNl.id)
   }
 
   async function handleResetToDraft() {
@@ -373,12 +256,6 @@ export function SendCampaignSection() {
     load()
   }
 
-  function abortSend() {
-    abortRef.current = true
-    toast.info("Aborting... will stop after current batch.")
-  }
-
-  const draftNewsletters = newsletters.filter((n) => n.status === "draft")
   const progressPct =
     sendProgress.total > 0 ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100 : 0
 
@@ -412,6 +289,9 @@ export function SendCampaignSection() {
                         >
                           {nl.status}
                         </Badge>
+                        {sending && activeNewsletterId === nl.id && (
+                          <Loader2 className="size-3 animate-spin text-primary" />
+                        )}
                       </div>
                     </SelectItem>
                   ))}
@@ -479,12 +359,12 @@ export function SendCampaignSection() {
                       Send Now
                     </Button>
                   )}
-                  {selectedNl.status === "sending" && !sending && (
+                  {selectedNl.status === "sending" && !isThisCampaignSending && (
                     <>
                       <Button
                         size="sm"
-                        onClick={handleSend}
-                        disabled={selectedNl.listIds.length === 0 || !selectedNl.senderId}
+                        onClick={() => selectedNl.id && startSend(selectedNl.id)}
+                        disabled={sending || selectedNl.listIds.length === 0 || !selectedNl.senderId}
                       >
                         <Send className="mr-2 size-4" />
                         Resume Send
@@ -493,6 +373,7 @@ export function SendCampaignSection() {
                         size="sm"
                         variant="outline"
                         onClick={handleResetToDraft}
+                        disabled={sending}
                       >
                         Reset to Draft
                       </Button>
@@ -506,35 +387,114 @@ export function SendCampaignSection() {
       </Card>
 
       {/* Send progress */}
-      {sending && (
+      {isThisCampaignSending && (
         <Card>
           <CardContent className="p-5">
             <div className="flex items-center gap-3 mb-3">
               <Loader2 className="size-5 animate-spin text-primary" />
-              <span className="font-medium text-foreground">Sending in progress...</span>
+              <span className="font-medium text-foreground">
+                {phase === "preparing" && "Preparing campaign..."}
+                {phase === "checking-smtp" && "Verifying SMTP connection..."}
+                {phase === "sending" && "Sending in progress..."}
+                {phase === "finishing" && "Finishing up..."}
+              </span>
               <Button variant="destructive" size="sm" className="ml-auto" onClick={abortSend}>
                 Abort
               </Button>
             </div>
-            <Progress value={progressPct} className="mb-2" />
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span>Total: {sendProgress.total}</span>
-              <span className="text-success flex items-center gap-1">
-                <CheckCircle2 className="size-3" />
-                Sent: {sendProgress.sent}
-              </span>
-              <span className="text-destructive flex items-center gap-1">
-                <XCircle className="size-3" />
-                Failed: {sendProgress.failed}
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="size-3" />
-                Remaining: {sendProgress.total - sendProgress.sent - sendProgress.failed}
+            {phase === "checking-smtp" && (
+              <p className="text-xs text-muted-foreground mb-2">
+                Testing connection to your SMTP server before sending...
+              </p>
+            )}
+            {(phase === "sending" || phase === "finishing") && (
+              <>
+                <Progress value={progressPct} className="mb-2" />
+                <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                  <span>Total: {sendProgress.total}</span>
+                  <span className="text-success flex items-center gap-1">
+                    <CheckCircle2 className="size-3" />
+                    Sent: {sendProgress.sent}
+                  </span>
+                  <span className="text-destructive flex items-center gap-1">
+                    <XCircle className="size-3" />
+                    Failed: {sendProgress.failed}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Clock className="size-3" />
+                    Remaining: {sendProgress.total - sendProgress.sent - sendProgress.failed}
+                  </span>
+                  {sendSpeed.perSecond > 0 && (
+                    <>
+                      <span className="flex items-center gap-1 text-primary">
+                        <Zap className="size-3" />
+                        {sendSpeed.perSecond.toFixed(1)} emails/s
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="size-3" />
+                        ETA: {sendSpeed.etaSeconds < 60 ? `${Math.ceil(sendSpeed.etaSeconds)}s` : `${Math.floor(sendSpeed.etaSeconds / 60)}m ${Math.ceil(sendSpeed.etaSeconds % 60)}s`}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Other campaign sending indicator */}
+      {sending && activeNewsletterId !== selectedNlId && (
+        <Card className="border-primary/30">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3">
+              <Loader2 className="size-4 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">
+                Another campaign is currently being sent ({sendProgress.sent}/{sendProgress.total})
               </span>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Troubleshooting */}
+      {sendLogs.filter((l) => l.status === "failed").length > 0 && (() => {
+        const diagnostics = diagnoseErrors(sendLogs)
+        if (diagnostics.length === 0) return null
+        return (
+          <Card className="border-destructive/30">
+            <CardContent className="p-5">
+              <Collapsible defaultOpen>
+                <CollapsibleTrigger className="flex w-full items-center gap-2 text-left">
+                  <Wrench className="size-4 text-destructive" />
+                  <span className="font-medium text-foreground">
+                    Troubleshooting — {sendLogs.filter((l) => l.status === "failed").length} failed email{sendLogs.filter((l) => l.status === "failed").length !== 1 ? "s" : ""}
+                  </span>
+                  <ChevronDown className="ml-auto size-4 text-muted-foreground transition-transform [[data-state=open]>&]:rotate-180" />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-3 grid gap-3">
+                    {diagnostics.map((d) => (
+                      <div key={d.category} className={`rounded-md border p-3 ${d.severity === "error" ? "border-destructive/30 bg-destructive/5" : "border-warning/30 bg-warning/5"}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          {d.severity === "error" ? (
+                            <XCircle className="size-4 text-destructive" />
+                          ) : (
+                            <AlertTriangle className="size-4 text-warning" />
+                          )}
+                          <span className="text-sm font-medium text-foreground">{d.category}</span>
+                          <Badge variant="secondary" className="ml-auto text-xs">{d.count} email{d.count !== 1 ? "s" : ""}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground ml-6">{d.suggestion}</p>
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {/* Send Logs */}
       {sendLogs.length > 0 && (
@@ -608,7 +568,7 @@ export function SendCampaignSection() {
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleSend}>
+            <Button onClick={handleConfirmSend}>
               <Send className="mr-2 size-4" />
               Confirm Send
             </Button>
