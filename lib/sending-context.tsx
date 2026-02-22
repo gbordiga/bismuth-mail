@@ -10,15 +10,20 @@ function computeMaxBatchSize(maxConnections: number, delayMs: number): number {
   const AVG_TIME_PER_EMAIL_MS = 500
   const RETRY_FACTOR = 1.5
 
+  const byThroughput = Math.floor(
+    TIME_BUDGET_MS * maxConnections / (AVG_TIME_PER_EMAIL_MS * RETRY_FACTOR)
+  )
+
   let byTime: number
   if (delayMs > 0) {
-    byTime = Math.floor(
-      (TIME_BUDGET_MS - AVG_TIME_PER_EMAIL_MS * RETRY_FACTOR) / delayMs
-    ) + 1
-  } else {
-    byTime = Math.floor(
-      TIME_BUDGET_MS * maxConnections / (AVG_TIME_PER_EMAIL_MS * RETRY_FACTOR)
+    byTime = Math.min(
+      Math.floor(
+        (TIME_BUDGET_MS - AVG_TIME_PER_EMAIL_MS * RETRY_FACTOR) / delayMs
+      ) + 1,
+      byThroughput,
     )
+  } else {
+    byTime = byThroughput
   }
 
   return Math.min(Math.max(byTime, 10), 500)
