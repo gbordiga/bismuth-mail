@@ -2,6 +2,12 @@
 
 All notable changes to Bismuth Mail are documented here.
 
+## [0.2.2] — 2026-02-23
+
+### Changed
+
+- Simplified email footer to show only the unsubscribe link, removing the redundant "subscribed to our mailing list" message
+
 ## [0.2.1] — 2026-02-23
 
 ### Changed

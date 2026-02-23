@@ -60,7 +60,6 @@ export function buildFullHtml(
   </div>
   ${senderSig ? `<div style="padding: 16px 24px; border-top: 1px solid #e5e7eb;">${senderSig}</div>` : ""}
   <div class="email-footer">
-    <p>You received this email because you subscribed to our mailing list.</p>
     <p>To unsubscribe, <a href="${unsubscribeHref}">click here to send an unsubscribe request</a>.</p>
   </div>
 </div>
