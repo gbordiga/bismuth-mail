@@ -2,6 +2,14 @@
 
 All notable changes to Bismuth Mail are documented here.
 
+## [0.2.1] — 2026-02-23
+
+### Changed
+
+- Added dependency overrides for minimatch, nodemailer, and ajv to enforce secure minimum versions
+- Updated nodemailer to 8.0.1 and ajv to 8.18.0
+- Added explicit `permissions: { contents: read }` to CI workflow to follow the principle of least privilege
+
 ## [0.2.0] — 2025-02-22
 
 ### Added
