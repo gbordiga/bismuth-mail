@@ -2,6 +2,21 @@
 
 All notable changes to Bismuth Mail are documented here.
 
+## [0.2.4] — 2026-02-24
+
+### Added
+
+- Added global App Router error boundaries via `app/error.tsx` and `app/global-error.tsx` with recovery actions
+- Added `send-batch` API route tests covering invalid payloads, merge field/HTML escaping behavior, and transient retry handling
+- Added reusable `useDbTable` hook for consistent Dexie table loading state (`data`, `loading`, `error`, `reload`)
+
+### Changed
+
+- Refactored `smtp-config` to use the shared `useDbTable` loading pattern
+- Updated README with explicit CI scope (CI checks in repo, no CD workflow defined)
+- Added README security guidance for self-hosted SMTP credential handling
+- Aligned README TypeScript references to 5.9
+
 ## [0.2.3] — 2026-02-24
 
 ### Changed

@@ -6,7 +6,7 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61dafb?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6?logo=typescript)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06b6d4?logo=tailwindcss)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -32,7 +32,7 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 | Database   | [Dexie](https://dexie.org/) (IndexedDB)                                                                           |
 | Email      | [Nodemailer](https://nodemailer.com/) via API routes                                                              |
 | Validation | [Zod](https://zod.dev/)                                                                                           |
-| Language   | TypeScript 5.7                                                                                                    |
+| Language   | TypeScript 5.9                                                                                                    |
 
 ## Getting Started
 
@@ -63,6 +63,21 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 pnpm build
 pnpm start
 ```
+
+## Quality and CI
+
+- A GitHub Actions CI workflow runs on pushes and pull requests to `main`.
+- The workflow runs `pnpm lint`, `tsc --noEmit`, `pnpm test`, and `pnpm build`.
+- The repository currently includes CI checks only; deployment (CD) is not defined in this repository.
+
+## Security Notes (Self-Hosted)
+
+- SMTP credentials are configured in the client UI and sent to `/api/smtp/*` routes to perform test/send operations.
+- This tradeoff is acceptable for private self-hosted environments, but you should treat the app as an internal tool unless you add authentication and additional hardening.
+- Recommended baseline:
+  - Serve only over HTTPS.
+  - Restrict access to trusted users/networks.
+  - Avoid exposing the app publicly without authentication, rate limiting, and monitoring.
 
 ## Project Structure
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { db, type SmtpConfig } from "@/lib/db"
+import { useDbTable } from "@/hooks/use-db-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -32,20 +33,22 @@ const emptyConfig: Omit<SmtpConfig, "id" | "createdAt"> = {
 }
 
 export function SmtpConfigSection() {
-  const [configs, setConfigs] = useState<SmtpConfig[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [form, setForm] = useState(emptyConfig)
   const [testing, setTesting] = useState(false)
 
-  const loadConfigs = useCallback(async () => {
-    const all = await db.smtpConfigs.orderBy("createdAt").reverse().toArray()
-    setConfigs(all)
+  const loadConfigsQuery = useCallback(async () => {
+    return db.smtpConfigs.orderBy("createdAt").reverse().toArray()
   }, [])
 
+  const { data: configs, loading, error, reload: loadConfigs } = useDbTable<SmtpConfig>(loadConfigsQuery)
+
   useEffect(() => {
-    loadConfigs()
-  }, [loadConfigs])
+    if (error) {
+      toast.error(`Could not load SMTP configurations: ${error}`)
+    }
+  }, [error])
 
   function openCreate() {
     setEditingId(null)
@@ -129,7 +132,14 @@ export function SmtpConfigSection() {
         </Button>
       </div>
 
-      {configs.length === 0 ? (
+      {loading ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <CardTitle className="mb-2 text-base">Loading SMTP servers...</CardTitle>
+            <CardDescription>Please wait while configurations are loaded from local storage</CardDescription>
+          </CardContent>
+        </Card>
+      ) : configs.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Server className="mb-4 size-12 text-muted-foreground/40" />
