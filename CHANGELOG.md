@@ -2,6 +2,14 @@
 
 All notable changes to Bismuth Mail are documented here.
 
+## [0.2.3] — 2026-02-24
+
+### Changed
+
+- Performed a structured dependency refresh across runtime and tooling packages, including `zod` v4, `sonner` v2, `tailwindcss` v4.2, `typescript` v5.9, and related type packages
+- Updated `nodemailer` to `8.0.1` explicitly in dependencies and removed now-redundant `nodemailer` overrides
+- Kept `eslint` on v9 intentionally due to current `eslint-config-next` plugin incompatibility with v10 in this project
+
 ## [0.2.2] — 2026-02-23
 
 ### Changed
