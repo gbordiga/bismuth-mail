@@ -116,7 +116,7 @@ All data stays in your browser's IndexedDB. Use the Backup section to export/imp
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes between versions.
+See [changelog.yaml](changelog.yaml) for a detailed list of changes between versions.
 
 ## Contributing
 

@@ -7,6 +7,7 @@ import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { useSending } from "@/lib/sending-context"
+import { ChangelogModal } from "@/components/changelog-modal"
 
 const navItems = [
   { id: "smtp", label: "SMTP Config", icon: Server },
@@ -27,6 +28,7 @@ interface AppShellProps {
 
 export function AppShell({ activeSection, onSectionChange, children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [changelogOpen, setChangelogOpen] = useState(false)
   const { theme, setTheme } = useTheme()
   const { sending, phase, sendProgress } = useSending()
 
@@ -130,10 +132,15 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
           )}
         </nav>
         <div className="border-t p-4 flex items-center justify-between">
-          <div>
+          <button
+            onClick={() => setChangelogOpen(true)}
+            className="text-left hover:opacity-80 transition-opacity"
+          >
             <p className="text-xs text-muted-foreground">Stored locally in IndexedDB</p>
-            <p className="text-[10px] text-muted-foreground/60">v{process.env.NEXT_PUBLIC_APP_VERSION}</p>
-          </div>
+            <p className="text-[10px] text-muted-foreground/60 hover:text-primary transition-colors cursor-pointer">
+              v{process.env.NEXT_PUBLIC_APP_VERSION} · View changelog
+            </p>
+          </button>
           <Button
             variant="ghost"
             size="icon"
@@ -165,6 +172,9 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
       </div>
+
+      {/* Changelog Modal */}
+      <ChangelogModal open={changelogOpen} onOpenChange={setChangelogOpen} />
     </div>
   )
 }
