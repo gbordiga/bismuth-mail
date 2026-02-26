@@ -2,6 +2,24 @@
 
 All notable changes to Bismuth Mail are documented here.
 
+## [0.2.5] — 2026-02-26
+
+### Added
+
+- Contact List cleanup action to remove invalid emails and deduplicate entries directly from the list view
+- Visual validation summary cards in the contacts view showing latest cleanup and import validation outcomes with grouped counters
+
+### Changed
+
+- CSV import for newsletter contacts now validates emails client-side, normalizes addresses, and rejects invalid rows before insertion
+- CSV import now detects duplicates inside the uploaded file and reports them separately from already-existing contacts in the target list
+- Import and cleanup feedback now provides detailed counts for imported, skipped, invalid-format, duplicate, and existing-contact records
+
+### Fixed
+
+- Contact deduplication now uses normalized case-insensitive email matching to avoid duplicate records with different capitalization
+- Manual contact addition now validates email format and normalizes email addresses
+
 ## [0.2.4] — 2026-02-24
 
 ### Added

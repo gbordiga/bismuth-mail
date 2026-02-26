@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus } from "lucide-react"
+import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus, Sparkles } from "lucide-react"
 import { toast } from "sonner"
+import { z } from "zod"
 
 // --- CSV Parser (simple, handles quotes) ---
 function parseCSV(text: string): string[][] {
@@ -91,6 +92,20 @@ export function EmailListSection() {
   const [csvData, setCsvData] = useState<string[][]>([])
   const [csvMapping, setCsvMapping] = useState<Record<string, number>>({})
   const [searchQuery, setSearchQuery] = useState("")
+  const [lastCleanupResult, setLastCleanupResult] = useState<{
+    removed: number
+    invalidRemoved: number
+    duplicatesRemoved: number
+    at: Date
+  } | null>(null)
+  const [lastImportReport, setLastImportReport] = useState<{
+    imported: number
+    skipped: number
+    invalid: number
+    duplicatesInImport: number
+    existingSkipped: number
+    at: Date
+  } | null>(null)
 
   const loadLists = useCallback(async () => {
     const all = await db.emailLists.orderBy("createdAt").reverse().toArray()
@@ -117,6 +132,8 @@ export function EmailListSection() {
     if (selectedList) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- reload contacts when list changes
       void loadContacts(selectedList.id!)
+      setLastCleanupResult(null)
+      setLastImportReport(null)
     }
   }, [selectedList, loadContacts])
 
@@ -218,11 +235,17 @@ export function EmailListSection() {
       await db.contacts.update(editingContactId, { ...contactForm })
       toast.success("Contact updated")
     } else {
-      // Check duplicate
+      const normalizedEmail = contactForm.email.trim().toLowerCase()
+      const isValid = z.string().email().safeParse(normalizedEmail).success
+      if (!isValid) {
+        toast.error("Please enter a valid email address")
+        return
+      }
+      
       const existing = await db.contacts
         .where("listId")
         .equals(selectedList!.id!)
-        .filter((c) => c.email === contactForm.email)
+        .filter((c) => c.email.trim().toLowerCase() === normalizedEmail)
         .first()
       if (existing) {
         toast.error("This email already exists in this list")
@@ -230,6 +253,7 @@ export function EmailListSection() {
       }
       await db.contacts.add({
         ...contactForm,
+        email: normalizedEmail,
         listId: selectedList!.id!,
         subscribedAt: new Date(),
         unsubscribed: false,
@@ -292,18 +316,33 @@ export function EmailListSection() {
     const dataRows = csvData.slice(1)
 
     const existingContacts = await db.contacts.where("listId").equals(selectedList!.id!).toArray()
-    const existingEmails = new Set(existingContacts.map((c) => c.email))
+    const existingEmails = new Set(existingContacts.map((c) => c.email.trim().toLowerCase()))
 
+    const importEmails = new Set<string>()
     const toAdd: Omit<Contact, "id">[] = []
-    let skipped = 0
+    let invalid = 0
+    let duplicatesInImport = 0
 
     for (const row of dataRows) {
-      const email = row[csvMapping.email]?.trim()
-      if (!email || !email.includes("@") || existingEmails.has(email)) {
-        skipped++
+      const rawEmail = row[csvMapping.email]?.trim() ?? ""
+      const normalizedEmail = rawEmail.toLowerCase()
+      
+      const isValid = z.string().email().safeParse(normalizedEmail).success
+      if (!isValid) {
+        invalid++
         continue
       }
-      existingEmails.add(email)
+
+      if (importEmails.has(normalizedEmail)) {
+        duplicatesInImport++
+        continue
+      }
+
+      if (existingEmails.has(normalizedEmail)) {
+        continue
+      }
+
+      importEmails.add(normalizedEmail)
 
       const customData: Record<string, string> = {}
       if (selectedList?.customFields) {
@@ -317,7 +356,7 @@ export function EmailListSection() {
 
       toAdd.push({
         listId: selectedList!.id!,
-        email,
+        email: normalizedEmail,
         firstName: csvMapping.firstName !== undefined ? (row[csvMapping.firstName]?.trim() ?? "") : "",
         lastName: csvMapping.lastName !== undefined ? (row[csvMapping.lastName]?.trim() ?? "") : "",
         customData,
@@ -326,14 +365,79 @@ export function EmailListSection() {
       })
     }
 
+    const existingSkipped = dataRows.length - invalid - duplicatesInImport - toAdd.length
+    const skipped = invalid + duplicatesInImport + existingSkipped
+
     if (toAdd.length > 0) {
       await db.contacts.bulkAdd(toAdd)
     }
 
-    toast.success(`Imported ${toAdd.length} contacts, ${skipped} skipped`)
+    setLastImportReport({
+      imported: toAdd.length,
+      skipped,
+      invalid,
+      duplicatesInImport,
+      existingSkipped,
+      at: new Date(),
+    })
+
+    toast.success(
+      `Imported ${toAdd.length}. Skipped ${skipped} (invalid: ${invalid}, duplicates in file: ${duplicatesInImport}, already in list: ${existingSkipped})`
+    )
     setImportDialogOpen(false)
     setCsvData([])
     loadContacts(selectedList!.id!)
+    loadLists()
+  }
+
+  async function handleCleanList() {
+    if (!selectedList) return
+
+    const allContacts = await db.contacts.where("listId").equals(selectedList.id!).toArray()
+    const seenEmails = new Set<string>()
+    const idsToDelete: number[] = []
+    let invalidRemoved = 0
+    let duplicatesRemoved = 0
+
+    for (const contact of allContacts) {
+      const normalizedEmail = contact.email.trim().toLowerCase()
+      const isValid = z.string().email().safeParse(normalizedEmail).success
+
+      if (!isValid) {
+        idsToDelete.push(contact.id!)
+        invalidRemoved++
+        continue
+      }
+
+      if (seenEmails.has(normalizedEmail)) {
+        idsToDelete.push(contact.id!)
+        duplicatesRemoved++
+        continue
+      }
+
+      seenEmails.add(normalizedEmail)
+    }
+
+    if (idsToDelete.length > 0) {
+      await db.contacts.bulkDelete(idsToDelete)
+    }
+
+    setLastCleanupResult({
+      removed: idsToDelete.length,
+      invalidRemoved,
+      duplicatesRemoved,
+      at: new Date(),
+    })
+
+    if (idsToDelete.length === 0) {
+      toast.info("No invalid or duplicate emails found")
+    } else {
+      toast.success(
+        `Cleanup completed: ${idsToDelete.length} removed (${invalidRemoved} invalid, ${duplicatesRemoved} duplicates)`
+      )
+    }
+
+    loadContacts(selectedList.id!)
     loadLists()
   }
 
@@ -517,6 +621,10 @@ export function EmailListSection() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleCleanList}>
+            <Sparkles className="mr-2 size-4" />
+            Clean List
+          </Button>
           <label htmlFor="csv-upload" className="cursor-pointer">
             <Button variant="outline" asChild>
               <span>
@@ -540,6 +648,51 @@ export function EmailListSection() {
         onChange={(e) => setSearchQuery(e.target.value)}
         className="max-w-md"
       />
+
+      {/* Validation Summary Cards */}
+      {(lastCleanupResult || lastImportReport) && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {lastCleanupResult && (
+            <Card className="border-amber-300/60 bg-amber-50/40 dark:bg-amber-950/10">
+              <CardContent className="flex flex-col gap-2 p-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Last Cleanup Result</CardTitle>
+                  <Badge variant="outline">{lastCleanupResult.at.toLocaleTimeString()}</Badge>
+                </div>
+                <div className="text-2xl font-semibold">{lastCleanupResult.removed} removed</div>
+                <p className="text-sm text-muted-foreground">
+                  Duplicate emails removed: {lastCleanupResult.duplicatesRemoved}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Invalid email format removed: {lastCleanupResult.invalidRemoved}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+          {lastImportReport && (
+            <Card className="border-blue-300/60 bg-blue-50/40 dark:bg-blue-950/10">
+              <CardContent className="flex flex-col gap-2 p-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Last Import Validation</CardTitle>
+                  <Badge variant="outline">{lastImportReport.at.toLocaleTimeString()}</Badge>
+                </div>
+                <p className="text-sm">
+                  Imported: <span className="font-semibold">{lastImportReport.imported}</span>
+                </p>
+                <p className="text-sm">
+                  Skipped duplicates in file: <span className="font-semibold">{lastImportReport.duplicatesInImport}</span>
+                </p>
+                <p className="text-sm">
+                  Skipped invalid format: <span className="font-semibold">{lastImportReport.invalid}</span>
+                </p>
+                <p className="text-sm">
+                  Skipped already in list: <span className="font-semibold">{lastImportReport.existingSkipped}</span>
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {contacts.length === 0 ? (
         <Card>
@@ -687,6 +840,9 @@ export function EmailListSection() {
           </DialogHeader>
           {csvData.length > 0 && (
             <div className="grid gap-4 py-2">
+              <p className="text-xs text-muted-foreground">
+                During import, invalid emails and duplicates are automatically skipped. You will get a detailed report.
+              </p>
               <p className="text-xs text-muted-foreground">CSV Headers: {csvData[0].join(", ")}</p>
               <div className="grid gap-3">
                 <div className="grid grid-cols-2 items-center gap-4">
