@@ -1,6 +1,6 @@
 {
   "name": "bismuth-mail",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "packageManager": "pnpm@10.29.1",
   "scripts": {
     "dev": "next dev",

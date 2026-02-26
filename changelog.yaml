@@ -1,4 +1,17 @@
 versions:
+  - version: 0.2.6
+    date: 2026-02-26
+    changes:
+      - type: added
+        items:
+          - In-app changelog modal accessible from the sidebar, showing full version history with categorized release notes
+          - Changelog API route serving structured data from `changelog.yaml`
+          - Dynamic favicon with Bismuth brand gradient generated via `next/og`
+
+      - type: changed
+        items:
+          - Migrated changelog from Markdown to structured YAML format for programmatic access
+
   - version: 0.2.5
     date: 2026-02-26
     changes:
