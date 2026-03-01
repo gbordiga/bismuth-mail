@@ -122,7 +122,7 @@ async function processBatchWithWorkerPool(args: {
       const contact = contacts[index]
 
       if (delayMs > 0 && index > 0) {
-        await sleep(delayMs * index)
+        await sleep(delayMs)
       }
 
       const mailtoHref = `mailto:${unsubscribeEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this mailing list.`)}`

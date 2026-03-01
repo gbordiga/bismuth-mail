@@ -639,6 +639,27 @@ export function EmailListSection() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={pendingDeleteListId !== null} onOpenChange={(open) => !open && setPendingDeleteListId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete list and contacts?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently removes the selected list and all contacts inside it. Campaign references to this list
+                will also be removed.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={confirmDeleteList}
+              >
+                Delete list
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     )
   }
@@ -1028,27 +1049,6 @@ export function EmailListSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={pendingDeleteListId !== null} onOpenChange={(open) => !open && setPendingDeleteListId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete list and contacts?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes the selected list and all contacts inside it. Campaign references to this list
-              will also be removed.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={confirmDeleteList}
-            >
-              Delete list
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog
         open={pendingDeleteContactId !== null}
