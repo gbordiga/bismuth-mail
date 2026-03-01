@@ -1,4 +1,18 @@
 versions:
+  - version: 0.2.8
+    date: 2026-03-01
+    changes:
+      - type: added
+        items:
+          - Tooltips on key action buttons across campaign, editor, sender, SMTP, and list flows to improve affordance and discoverability
+          - Shared `content-area` layout utility class to standardize section spacing and structure
+
+      - type: changed
+        items:
+          - Refined empty-state presentation in Send Campaign, Sender, and SMTP Config sections for a clearer first-run experience
+          - Reworked Backup and Email List sections to adopt the new layout and alert composition patterns
+          - Reorganized AppShell navigation by grouping related destinations for faster scanning
+
   - version: 0.2.7
     date: 2026-02-26
     changes:
