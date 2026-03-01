@@ -1,16 +1,18 @@
-import { NextResponse } from "next/server"
 import nodemailer from "nodemailer"
 import { smtpSendSchema } from "@/lib/validations"
+import {
+  classifySmtpError,
+  smtpSuccessResponse,
+  smtpValidationError,
+  smtpErrorResponse,
+} from "@/lib/api/smtp-response"
 
 export async function POST(req: Request) {
   try {
     const body = await req.json()
     const parsed = smtpSendSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: "Invalid request: " + parsed.error.issues.map((i) => i.message).join(", ") },
-        { status: 400 },
-      )
+      return smtpValidationError(parsed.error.issues)
     }
     const { smtp, from, replyTo, to, subject, html } = parsed.data
 
@@ -34,10 +36,9 @@ export async function POST(req: Request) {
       html,
     })
 
-    return NextResponse.json({ success: true })
+    return smtpSuccessResponse()
   } catch (error: unknown) {
-    const raw = error instanceof Error ? error.message : "Unknown error"
-    const safe = raw.length > 200 ? raw.slice(0, 200) + "..." : raw
-    return NextResponse.json({ success: false, error: safe }, { status: 500 })
+    const classified = classifySmtpError(error)
+    return smtpErrorResponse(classified)
   }
 }

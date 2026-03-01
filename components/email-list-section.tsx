@@ -18,6 +18,16 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -73,6 +83,8 @@ export function EmailListSection() {
   const [listDialogOpen, setListDialogOpen] = useState(false)
   const [contactDialogOpen, setContactDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [pendingDeleteListId, setPendingDeleteListId] = useState<number | null>(null)
+  const [pendingDeleteContactId, setPendingDeleteContactId] = useState<number | null>(null)
   const [editingListId, setEditingListId] = useState<number | null>(null)
   const [editingContactId, setEditingContactId] = useState<number | null>(null)
 
@@ -195,7 +207,13 @@ export function EmailListSection() {
   }
 
   async function handleDeleteList(id: number) {
-    if (!window.confirm("Delete this list and all its contacts? This cannot be undone.")) return
+    setPendingDeleteListId(id)
+  }
+
+  async function confirmDeleteList() {
+    if (!pendingDeleteListId) return
+    const id = pendingDeleteListId
+    setPendingDeleteListId(null)
     await db.contacts.where("listId").equals(id).delete()
     // Clean up newsletter listIds references
     const referencingNls = await db.newsletters.filter((nl) => nl.listIds.includes(id)).toArray()
@@ -266,7 +284,13 @@ export function EmailListSection() {
   }
 
   async function handleDeleteContact(id: number) {
-    if (!window.confirm("Remove this contact?")) return
+    setPendingDeleteContactId(id)
+  }
+
+  async function confirmDeleteContact() {
+    if (!pendingDeleteContactId || !selectedList) return
+    const id = pendingDeleteContactId
+    setPendingDeleteContactId(null)
     await db.contacts.delete(id)
     toast.success("Contact removed")
     loadContacts(selectedList!.id!)
@@ -454,10 +478,10 @@ export function EmailListSection() {
   if (!selectedList) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
+        <div className="section-header">
           <div>
-            <h2 className="text-xl font-semibold text-foreground">Email Lists</h2>
-            <p className="text-sm text-muted-foreground">Manage your contact lists and custom fields</p>
+            <h2 className="section-title">Email Lists</h2>
+            <p className="section-description">Manage your contact lists and custom fields</p>
           </div>
           <Button onClick={openCreateList}>
             <Plus className="mr-2 size-4" />
@@ -478,8 +502,17 @@ export function EmailListSection() {
             {lists.map((list) => (
               <Card
                 key={list.id}
-                className="cursor-pointer transition-shadow hover:shadow-md"
+                className="cursor-pointer transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-primary/30"
+                role="button"
+                tabIndex={0}
+                aria-label={`Open list ${list.name}`}
                 onClick={() => setSelectedList(list)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    setSelectedList(list)
+                  }
+                }}
               >
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between">
@@ -493,6 +526,7 @@ export function EmailListSection() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Edit list ${list.name}`}
                         onClick={(e) => {
                           e.stopPropagation()
                           openEditList(list)
@@ -503,6 +537,7 @@ export function EmailListSection() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={`Delete list ${list.name}`}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleDeleteList(list.id!)
@@ -564,6 +599,7 @@ export function EmailListSection() {
                       {f.name} ({f.type})
                       <button
                         onClick={() => removeCustomField(f.name)}
+                        aria-label={`Remove custom field ${f.name}`}
                         className="ml-1 rounded-full p-0.5 hover:bg-muted"
                       >
                         <X className="size-3" />
@@ -610,17 +646,19 @@ export function EmailListSection() {
   // --- Render: Contact Detail View ---
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
+      <div className="section-header">
+        <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => setSelectedList(null)}>
           <ArrowLeft className="size-4" />
         </Button>
         <div className="flex-1">
-          <h2 className="text-xl font-semibold text-foreground">{selectedList.name}</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="section-title">{selectedList.name}</h2>
+          <p className="section-description">
             {selectedList.description || "No description"} &middot; {contacts.length} contacts
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        </div>
+        <div className="action-cluster">
           <Button variant="outline" onClick={handleCleanList}>
             <Sparkles className="mr-2 size-4" />
             Clean List
@@ -990,6 +1028,50 @@ export function EmailListSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={pendingDeleteListId !== null} onOpenChange={(open) => !open && setPendingDeleteListId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete list and contacts?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the selected list and all contacts inside it. Campaign references to this list
+              will also be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDeleteList}
+            >
+              Delete list
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingDeleteContactId !== null}
+        onOpenChange={(open) => !open && setPendingDeleteContactId(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove contact?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the contact from the current list and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDeleteContact}
+            >
+              Remove contact
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -86,7 +86,8 @@ describe("POST /api/smtp/send-batch", () => {
 
     expect(res.status).toBe(400)
     expect(data.success).toBe(false)
-    expect(typeof data.error).toBe("string")
+    expect(data.code).toBe("VALIDATION_ERROR")
+    expect(typeof data.message).toBe("string")
     expect(createTransportMock).not.toHaveBeenCalled()
   })
 

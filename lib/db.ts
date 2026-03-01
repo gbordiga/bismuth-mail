@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from "dexie"
 
 // --- Types ---
+export const DB_SCHEMA_VERSION = 5
 
 export interface SmtpConfig {
   id?: number
@@ -133,6 +134,27 @@ db.version(4).stores({
 }).upgrade(tx => {
   return tx.table("smtpConfigs").toCollection().modify(config => {
     delete config.batchSize
+  })
+})
+
+db.version(5).stores({
+  smtpConfigs: "++id, name, createdAt",
+  senders: "++id, name, email, smtpConfigId, createdAt",
+  emailLists: "++id, name, createdAt",
+  contacts: "++id, listId, email, subscribedAt, unsubscribed",
+  newsletters: "++id, name, status, createdAt",
+  sendLogs: "++id, newsletterId, contactEmail, status",
+}).upgrade(async tx => {
+  await tx.table("contacts").toCollection().modify(contact => {
+    if (typeof contact.email === "string") {
+      contact.email = contact.email.trim().toLowerCase()
+    }
+  })
+
+  await tx.table("senders").toCollection().modify(sender => {
+    if (!sender.unsubscribeEmail && typeof sender.email === "string") {
+      sender.unsubscribeEmail = sender.email
+    }
   })
 })
 

@@ -17,6 +17,16 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Plus, Pencil, Trash2, Mail } from "lucide-react"
 import { toast } from "sonner"
 
@@ -34,6 +44,7 @@ export function SenderSection() {
   const [smtpConfigs, setSmtpConfigs] = useState<SmtpConfig[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [form, setForm] = useState(emptySender)
   const [previewSig, setPreviewSig] = useState(false)
 
@@ -92,7 +103,13 @@ export function SenderSection() {
       toast.error(`Cannot delete: this sender is used by ${nlCount} campaign(s)`)
       return
     }
-    if (!window.confirm("Are you sure you want to delete this sender?")) return
+    setPendingDeleteId(id)
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return
+    const id = pendingDeleteId
+    setPendingDeleteId(null)
     await db.senders.delete(id)
     toast.success("Sender deleted")
     load()
@@ -104,10 +121,10 @@ export function SenderSection() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="section-header">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">Senders</h2>
-          <p className="text-sm text-muted-foreground">Create sender identities with custom signatures</p>
+          <h2 className="section-title">Senders</h2>
+          <p className="section-description">Create sender identities with custom signatures</p>
         </div>
         <Button onClick={openCreate} disabled={smtpConfigs.length === 0}>
           <Plus className="mr-2 size-4" />
@@ -283,6 +300,26 @@ export function SenderSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete sender?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This sender will be permanently removed. Campaigns already linked to this sender must be updated first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDelete}
+            >
+              Delete sender
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

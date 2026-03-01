@@ -1,7 +1,13 @@
-import { NextResponse } from "next/server"
 import nodemailer from "nodemailer"
 import { smtpSendBatchSchema } from "@/lib/validations"
 import { buildFullHtml, type EditorBlock } from "@/lib/email-builder"
+import {
+  classifySmtpError,
+  smtpErrorResponse,
+  smtpSuccessResponse,
+  smtpValidationError,
+  trimErrorMessage,
+} from "@/lib/api/smtp-response"
 
 export const maxDuration = 300
 
@@ -25,6 +31,10 @@ function escapeHtml(str: string): string {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 interface ContactData {
   email: string
   firstName: string
@@ -39,7 +49,7 @@ function replaceMergeFields(html: string, contact: ContactData): string {
   result = result.replace(/\{\{lastName\}\}/g, escapeHtml(contact.lastName))
   if (contact.customData) {
     for (const [key, value] of Object.entries(contact.customData)) {
-      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), escapeHtml(value || ""))
+      result = result.replace(new RegExp(`\\{\\{${escapeRegExp(key)}\\}\\}`, "g"), escapeHtml(value || ""))
     }
   }
   return result
@@ -58,8 +68,7 @@ async function sendWithRetry(
       await transporter.sendMail(mail)
       return { email: mail.to, status: "sent", attempts: attempt + 1 }
     } catch (err: unknown) {
-      lastError = err instanceof Error ? err.message : "Unknown error"
-      if (lastError.length > 200) lastError = lastError.slice(0, 200) + "..."
+      lastError = trimErrorMessage(err, "Unknown error")
       if (attempt < maxRetries && isTransientError(err)) {
         await sleep(Math.pow(2, attempt) * 1000)
       } else {
@@ -70,15 +79,77 @@ async function sendWithRetry(
   return { email: mail.to, status: "failed", attempts: maxRetries + 1, error: lastError }
 }
 
+async function processBatchWithWorkerPool(args: {
+  contacts: ContactData[]
+  delayMs: number
+  maxConnections: number
+  subjectTemplate: string
+  blocks: EditorBlock[]
+  signature: string
+  unsubscribeEmail: string
+  transporter: nodemailer.Transporter
+  maxRetries: number
+  fromHeader: string
+  replyToHeader: string
+}): Promise<SendResult[]> {
+  const {
+    contacts,
+    delayMs,
+    maxConnections,
+    subjectTemplate,
+    blocks,
+    signature,
+    unsubscribeEmail,
+    transporter,
+    maxRetries,
+    fromHeader,
+    replyToHeader,
+  } = args
+
+  const results: SendResult[] = new Array(contacts.length)
+  let nextIndex = 0
+
+  const workerCount = Math.max(1, Math.min(maxConnections, contacts.length))
+
+  async function worker() {
+    while (true) {
+      const index = nextIndex
+      nextIndex += 1
+      if (index >= contacts.length) {
+        return
+      }
+
+      const contact = contacts[index]
+
+      if (delayMs > 0 && index > 0) {
+        await sleep(delayMs * index)
+      }
+
+      const mailtoHref = `mailto:${unsubscribeEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this mailing list.`)}`
+      const fullHtml = buildFullHtml(blocks, signature, mailtoHref)
+      const subject = replaceMergeFields(subjectTemplate, contact)
+      const html = replaceMergeFields(fullHtml, contact)
+
+      results[index] = await sendWithRetry(
+        transporter,
+        { from: fromHeader, replyTo: replyToHeader, to: contact.email, subject, html },
+        maxRetries,
+      )
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  return results
+}
+
 export async function POST(req: Request) {
+  let transporter: nodemailer.Transporter | null = null
+
   try {
     const body = await req.json()
     const parsed = smtpSendBatchSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: "Invalid request: " + parsed.error.issues.map((i) => i.message).join(", ") },
-        { status: 400 },
-      )
+      return smtpValidationError(parsed.error.issues)
     }
 
     const { smtp, from, replyTo, subjectTemplate, blocks, signature, unsubscribeEmail, contacts, delayMs, maxRetries, maxConnections } = parsed.data
@@ -86,7 +157,7 @@ export async function POST(req: Request) {
     const fromHeader = `"${safeName}" <${from.email}>`
     const replyToHeader = replyTo || from.email
 
-    const transporter = nodemailer.createTransport({
+    transporter = nodemailer.createTransport({
       host: smtp.host,
       port: smtp.port,
       secure: smtp.secure,
@@ -99,29 +170,25 @@ export async function POST(req: Request) {
       socketTimeout: 30000,
     })
 
-    const promises = contacts.map(async (contact, i) => {
-      if (delayMs > 0 && i > 0) {
-        await sleep(delayMs * i)
-      }
-
-      const mailtoHref = `mailto:${unsubscribeEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this mailing list.`)}`
-      const fullHtml = buildFullHtml(blocks as EditorBlock[], signature, mailtoHref)
-      const subject = replaceMergeFields(subjectTemplate, contact)
-      const html = replaceMergeFields(fullHtml, contact)
-
-      return sendWithRetry(
-        transporter,
-        { from: fromHeader, replyTo: replyToHeader, to: contact.email, subject, html },
-        maxRetries,
-      )
+    const results = await processBatchWithWorkerPool({
+      contacts,
+      delayMs,
+      maxConnections,
+      subjectTemplate,
+      blocks: blocks as EditorBlock[],
+      signature,
+      unsubscribeEmail,
+      transporter,
+      maxRetries,
+      fromHeader,
+      replyToHeader,
     })
 
-    const results = await Promise.all(promises)
-    transporter.close()
-    return NextResponse.json({ success: true, results })
+    return smtpSuccessResponse({ results })
   } catch (error: unknown) {
-    const raw = error instanceof Error ? error.message : "Unknown error"
-    const safe = raw.length > 200 ? raw.slice(0, 200) + "..." : raw
-    return NextResponse.json({ success: false, error: safe, results: [] }, { status: 500 })
+    const classified = classifySmtpError(error)
+    return smtpErrorResponse({ ...classified, details: { results: [] } })
+  } finally {
+    transporter?.close()
   }
 }

@@ -38,7 +38,7 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 18.18 or later
+- [Node.js](https://nodejs.org/) 20 or later
 - [pnpm](https://pnpm.io/) 10+
 
 ### Installation
@@ -68,6 +68,7 @@ pnpm start
 
 - A GitHub Actions CI workflow runs on pushes and pull requests to `main`.
 - The workflow runs `pnpm lint`, `tsc --noEmit`, `pnpm test`, and `pnpm build`.
+- SMTP API route contracts are covered by route-level Vitest tests (`send`, `send-batch`, `test`).
 - The repository currently includes CI checks only; deployment (CD) is not defined in this repository.
 
 ## Security Notes (Self-Hosted)
@@ -84,10 +85,17 @@ pnpm start
 ```
 bismuth-mail/
 ├── app/
-│   ├── api/smtp/          # API routes for sending and testing emails
-│   ├── layout.tsx         # Root layout with theme provider
-│   ├── page.tsx           # Main entry point
-│   └── globals.css        # Global styles and Tailwind imports
+│   ├── api/smtp/              # API routes for sending and testing emails
+│   ├── (dashboard)/           # Route-based app sections
+│   │   ├── smtp/page.tsx
+│   │   ├── senders/page.tsx
+│   │   ├── lists/page.tsx
+│   │   ├── editor/page.tsx
+│   │   ├── send/page.tsx
+│   │   └── backup/page.tsx
+│   ├── layout.tsx             # Root layout with theme provider
+│   ├── page.tsx               # Redirects to /smtp
+│   └── globals.css            # Global styles and Tailwind imports
 ├── components/
 │   ├── app-shell.tsx      # Navigation shell with sidebar
 │   ├── smtp-config.tsx    # SMTP server management

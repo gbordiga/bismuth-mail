@@ -1,8 +1,9 @@
 "use client"
 
 import { createContext, useContext, useState, useRef, useCallback, useEffect, type ReactNode } from "react"
-import { db, type Contact } from "@/lib/db"
+import { db } from "@/lib/db"
 import { type EditorBlock } from "@/lib/email-builder"
+import { getUniqueActiveContacts } from "@/lib/repositories/campaign-repository"
 import { toast } from "sonner"
 
 function computeMaxBatchSize(maxConnections: number, delayMs: number): number {
@@ -138,7 +139,8 @@ export function SendingProvider({ children }: { children: ReactNode }) {
       })
       const testData = await testRes.json()
       if (!testData.success) {
-        toast.error(`SMTP connection failed: ${testData.error}. Fix your SMTP config before sending.`)
+        const message = testData.message ?? testData.error ?? "Unknown SMTP error"
+        toast.error(`SMTP connection failed: ${message}. Fix your SMTP config before sending.`)
         setSending(false)
         setPhase("idle")
         setActiveNewsletterId(null)
@@ -175,21 +177,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
       blocks = [{ id: "raw", type: "html", content: newsletter.htmlContent, props: {} }]
     }
 
-    const allContacts: Contact[] = []
-    const seenEmails = new Set<string>()
-    for (const lid of newsletter.listIds) {
-      const contactsInList = await db.contacts
-        .where("listId")
-        .equals(lid)
-        .filter((c) => !c.unsubscribed)
-        .toArray()
-      for (const c of contactsInList) {
-        if (!seenEmails.has(c.email)) {
-          seenEmails.add(c.email)
-          allContacts.push(c)
-        }
-      }
-    }
+    const allContacts = await getUniqueActiveContacts(newsletter.listIds)
 
     if (allContacts.length === 0) {
       toast.error("No active recipients found in the selected lists")
@@ -281,8 +269,14 @@ export function SendingProvider({ children }: { children: ReactNode }) {
         })
 
         const data = await res.json()
-        if (data.results) {
-          for (const r of data.results as { email: string; status: "sent" | "failed"; attempts: number; error?: string }[]) {
+        const batchResults = data.results ?? data.details?.results
+        if (batchResults) {
+          for (const r of batchResults as {
+            email: string
+            status: "sent" | "failed"
+            attempts: number
+            error?: string
+          }[]) {
             const contact = batch.find((c) => c.email === r.email)
             const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : r.email
             if (r.status === "sent") sentCount++
@@ -306,7 +300,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
               contactName: `${contact.firstName} ${contact.lastName}`.trim(),
               status: "failed",
               attempt: 1,
-              error: data.error || "Batch request failed",
+              error: data.message ?? data.error ?? "Batch request failed",
               sentAt: new Date(),
             })
           }

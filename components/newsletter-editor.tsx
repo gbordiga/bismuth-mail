@@ -19,6 +19,16 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Plus,
   Pencil,
   Trash2,
@@ -161,6 +171,7 @@ function BlockEditor({
               variant="ghost"
               size="icon"
               className="size-6"
+              aria-label="Move block up"
               onClick={() => moveBlock(block.id, -1)}
               disabled={idx === 0}
             >
@@ -170,6 +181,7 @@ function BlockEditor({
               variant="ghost"
               size="icon"
               className="size-6"
+              aria-label="Move block down"
               onClick={() => moveBlock(block.id, 1)}
               disabled={idx === blocks.length - 1}
             >
@@ -179,6 +191,7 @@ function BlockEditor({
               variant="ghost"
               size="icon"
               className="size-6 text-destructive"
+              aria-label="Remove block"
               onClick={() => removeBlock(block.id)}
             >
               <Trash2 className="size-3" />
@@ -393,6 +406,7 @@ export function NewsletterSection() {
   const [senders, setSenders] = useState<Sender[]>([])
   const [lists, setLists] = useState<EmailList[]>([])
   const [editing, setEditing] = useState<Newsletter | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
 
@@ -490,7 +504,13 @@ export function NewsletterSection() {
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm("Are you sure you want to delete this campaign and its send logs?")) return
+    setPendingDeleteId(id)
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return
+    const id = pendingDeleteId
+    setPendingDeleteId(null)
     await db.sendLogs.where("newsletterId").equals(id).delete()
     await db.newsletters.delete(id)
     toast.success("Campaign deleted")
@@ -540,10 +560,10 @@ export function NewsletterSection() {
   if (!dialogOpen) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
+        <div className="section-header">
           <div>
-            <h2 className="text-xl font-semibold text-foreground">Campaigns</h2>
-            <p className="text-sm text-muted-foreground">Create and manage your email campaigns</p>
+            <h2 className="section-title">Campaigns</h2>
+            <p className="section-description">Create and manage your email campaigns</p>
           </div>
           <Button onClick={openCreate}>
             <Plus className="mr-2 size-4" />
@@ -650,6 +670,26 @@ export function NewsletterSection() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action deletes the campaign and all related send logs. It cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={confirmDelete}
+              >
+                Delete campaign
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     )
   }
@@ -657,12 +697,12 @@ export function NewsletterSection() {
   // --- Editor view ---
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="section-header">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">{editing ? "Edit" : "New"} Campaign</h2>
-          <p className="text-sm text-muted-foreground">Build your email with content blocks</p>
+          <h2 className="section-title">{editing ? "Edit" : "New"} Campaign</h2>
+          <p className="section-description">Build your email with content blocks</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="action-cluster">
           <Button variant="outline" onClick={() => setDialogOpen(false)}>
             Cancel
           </Button>

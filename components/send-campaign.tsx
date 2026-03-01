@@ -22,6 +22,11 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Send, Eye, AlertTriangle, CheckCircle2, XCircle, Clock, Loader2, Mail, ChevronDown, Zap, Wrench } from "lucide-react"
 import { toast } from "sonner"
 import { useSending } from "@/lib/sending-context"
+import {
+  countUniqueActiveRecipients,
+  loadSendCampaignData,
+  loadSendLogsByNewsletter,
+} from "@/lib/repositories/campaign-repository"
 
 import { type EditorBlock, buildFullHtml } from "@/lib/email-builder"
 
@@ -102,16 +107,11 @@ export function SendCampaignSection() {
   const isThisCampaignSending = sending && activeNewsletterId === selectedNlId
 
   const load = useCallback(async () => {
-    const [allNl, allSenders, allSmtp, allLists] = await Promise.all([
-      db.newsletters.orderBy("createdAt").reverse().toArray(),
-      db.senders.toArray(),
-      db.smtpConfigs.toArray(),
-      db.emailLists.toArray(),
-    ])
-    setNewsletters(allNl)
-    setSenders(allSenders)
-    setSmtpConfigs(allSmtp)
-    setLists(allLists)
+    const data = await loadSendCampaignData()
+    setNewsletters(data.newsletters)
+    setSenders(data.senders)
+    setSmtpConfigs(data.smtpConfigs)
+    setLists(data.lists)
   }, [])
 
   useEffect(() => {
@@ -128,7 +128,7 @@ export function SendCampaignSection() {
   // Load send logs for selected newsletter, refresh as progress updates
   useEffect(() => {
     if (selectedNlId) {
-      db.sendLogs.where("newsletterId").equals(selectedNlId).toArray().then(setSendLogs)
+      loadSendLogsByNewsletter(selectedNlId).then(setSendLogs)
     } else {
       setSendLogs([])
     }
@@ -216,7 +216,7 @@ export function SendCampaignSection() {
         toast.success(`Test email sent to ${testEmailAddress.trim()}`)
         setTestEmailOpen(false)
       } else {
-        toast.error(`Failed to send test email: ${data.error}`)
+        toast.error(`Failed to send test email: ${data.message ?? data.error ?? "Unknown SMTP error"}`)
       }
     } catch (err) {
       toast.error(`Failed to send test email: ${String(err)}`)
@@ -227,18 +227,8 @@ export function SendCampaignSection() {
 
   async function prepareConfirm() {
     if (!selectedNl) return
-    const seen = new Set<string>()
-    for (const lid of selectedNl.listIds) {
-      const contactsInList = await db.contacts
-        .where("listId")
-        .equals(lid)
-        .filter((c) => !c.unsubscribed)
-        .toArray()
-      for (const c of contactsInList) {
-        seen.add(c.email)
-      }
-    }
-    setRecipientCount(seen.size)
+    const uniqueRecipients = await countUniqueActiveRecipients(selectedNl.listIds)
+    setRecipientCount(uniqueRecipients)
     setConfirmOpen(true)
   }
 
@@ -262,8 +252,8 @@ export function SendCampaignSection() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-xl font-semibold text-foreground">Send Campaign</h2>
-        <p className="text-sm text-muted-foreground">Select a campaign and send it to your subscribers</p>
+        <h2 className="section-title">Send Campaign</h2>
+        <p className="section-description">Select a campaign and send it to your subscribers</p>
       </div>
 
       <Card>
@@ -300,7 +290,7 @@ export function SendCampaignSection() {
             </div>
 
             {selectedNl && (
-              <div className="rounded-lg border bg-muted/30 p-4">
+              <div className="status-panel p-4">
                 <div className="grid gap-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Subject:</span>
@@ -335,7 +325,7 @@ export function SendCampaignSection() {
                     </Badge>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-2">
+                <div className="action-cluster mt-4">
                   <Button variant="outline" size="sm" onClick={showPreview}>
                     <Eye className="mr-2 size-4" />
                     Preview

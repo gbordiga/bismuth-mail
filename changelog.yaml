@@ -1,4 +1,29 @@
 versions:
+  - version: 0.2.7
+    date: 2026-02-26
+    changes:
+      - type: added
+        items:
+          - Route-based dashboard sections (`/smtp`, `/senders`, `/lists`, `/editor`, `/send`, `/backup`) with root redirect from `/` to `/smtp`
+          - Shared campaign repository helpers for send data loading, unique recipient counting, and send log retrieval
+          - SMTP route contract tests for `/api/smtp/send` and `/api/smtp/test`
+          - Backup format v2 with metadata (`appVersion`, `dbSchemaVersion`) and legacy v1 import normalization
+
+      - type: changed
+        items:
+          - Refactored sidebar shell navigation to be pathname-aware and deep-link compatible
+          - Replaced destructive `window.confirm` prompts with accessible alert dialogs in sender/list/contact/campaign flows
+          - Standardized SMTP API envelopes to `{ success, code, message, retryable, details? }` across `test`, `send`, and `send-batch`
+          - Upgraded batch sending internals to worker-pool style processing and hardened merge-field replacement by escaping custom field regex keys
+          - Updated IndexedDB schema to v5 with contact email normalization and sender unsubscribe fallback migration
+          - Consolidated duplicated UI hook entry points by re-exporting shared `use-mobile` and `use-toast` implementations
+          - Introduced shared UI/IX utility classes (`section-header`, `section-title`, `section-description`, `action-cluster`, `status-panel`)
+
+      - type: fixed
+        items:
+          - Fixed merge field replacement edge cases for custom keys containing regex-special characters
+          - Fixed inconsistent SMTP error messaging in UI by handling both `message` and legacy `error` response fields
+
   - version: 0.2.6
     date: 2026-02-26
     changes:

@@ -110,7 +110,7 @@ export function SmtpConfigSection() {
       if (data.success) {
         toast.success("Connection successful!")
       } else {
-        toast.error(`Connection failed: ${data.error}`)
+        toast.error(`Connection failed: ${data.message ?? data.error ?? "Unknown SMTP error"}`)
       }
     } catch {
       toast.error("Could not test connection (server error)")
@@ -121,10 +121,10 @@ export function SmtpConfigSection() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="section-header">
         <div>
-          <h2 className="text-xl font-semibold text-foreground">SMTP Servers</h2>
-          <p className="text-sm text-muted-foreground">Configure your email sending servers</p>
+          <h2 className="section-title">SMTP Servers</h2>
+          <p className="section-description">Configure your email sending servers</p>
         </div>
         <Button onClick={openCreate}>
           <Plus className="mr-2 size-4" />

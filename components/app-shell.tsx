@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon, Loader2 } from "lucide-react"
@@ -10,23 +12,28 @@ import { useSending } from "@/lib/sending-context"
 import { ChangelogModal } from "@/components/changelog-modal"
 
 const navItems = [
-  { id: "smtp", label: "SMTP Config", icon: Server },
-  { id: "senders", label: "Senders", icon: Mail },
-  { id: "lists", label: "Email Lists", icon: Users },
-  { id: "editor", label: "Campaigns", icon: FileEdit },
-  { id: "send", label: "Send Campaign", icon: Send },
-  { id: "backup", label: "Backup", icon: DatabaseBackup },
+  { id: "smtp", label: "SMTP Config", href: "/smtp", icon: Server },
+  { id: "senders", label: "Senders", href: "/senders", icon: Mail },
+  { id: "lists", label: "Email Lists", href: "/lists", icon: Users },
+  { id: "editor", label: "Campaigns", href: "/editor", icon: FileEdit },
+  { id: "send", label: "Send Campaign", href: "/send", icon: Send },
+  { id: "backup", label: "Backup", href: "/backup", icon: DatabaseBackup },
 ] as const
 
 export type NavSection = (typeof navItems)[number]["id"]
 
+function getActiveSection(pathname: string): NavSection {
+  const item = navItems.find((entry) => pathname === entry.href || pathname.startsWith(`${entry.href}/`))
+  return item?.id ?? "smtp"
+}
+
 interface AppShellProps {
-  activeSection: NavSection
-  onSectionChange: (section: NavSection) => void
   children: React.ReactNode
 }
 
-export function AppShell({ activeSection, onSectionChange, children }: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
+  const pathname = usePathname()
+  const activeSection = getActiveSection(pathname)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [changelogOpen, setChangelogOpen] = useState(false)
   const { theme, setTheme } = useTheme()
@@ -72,11 +79,10 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
               const isActive = activeSection === item.id
               return (
                 <li key={item.id}>
-                  <button
-                    onClick={() => {
-                      onSectionChange(item.id)
-                      setMobileOpen(false)
-                    }}
+                  <Link
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => setMobileOpen(false)}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                       isActive
@@ -89,18 +95,16 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
                     {item.id === "send" && sending && (
                       <span className="ml-auto size-2 shrink-0 rounded-full bg-primary animate-pulse" />
                     )}
-                  </button>
+                  </Link>
                 </li>
               )
             })}
           </ul>
 
           {sending && (
-            <button
-              onClick={() => {
-                onSectionChange("send")
-                setMobileOpen(false)
-              }}
+            <Link
+              href="/send"
+              onClick={() => setMobileOpen(false)}
               className="mt-3 w-full rounded-lg border bg-muted/30 p-3 text-left transition-colors hover:bg-muted/50"
             >
               <div className="flex items-center gap-2 text-xs mb-1.5">
@@ -128,7 +132,7 @@ export function AppShell({ activeSection, onSectionChange, children }: AppShellP
                   Verifying SMTP connection...
                 </div>
               )}
-            </button>
+            </Link>
           )}
         </nav>
         <div className="border-t p-4 flex items-center justify-between">
