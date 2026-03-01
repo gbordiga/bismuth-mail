@@ -137,8 +137,12 @@
 }
 
 @layer components {
+  .content-area {
+    @apply flex flex-col gap-6;
+  }
+
   .section-header {
-    @apply flex flex-wrap items-start justify-between gap-3;
+    @apply mb-6 flex flex-wrap items-start justify-between gap-3;
   }
 
   .section-title {
@@ -155,5 +159,21 @@
 
   .status-panel {
     @apply rounded-lg border bg-muted/30;
+  }
+
+  .empty-state {
+    @apply flex flex-col items-center justify-center gap-3 px-6 py-12 text-center;
+  }
+
+  .empty-state-icon {
+    @apply flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary;
+  }
+
+  .empty-state-title {
+    @apply text-base font-semibold text-foreground;
+  }
+
+  .empty-state-description {
+    @apply max-w-md text-sm text-muted-foreground;
   }
 }

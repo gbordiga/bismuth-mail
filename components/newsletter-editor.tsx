@@ -8,14 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -44,6 +37,7 @@ import {
   ArrowDown,
   Code,
   ChevronDown,
+  Braces,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -51,10 +45,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { RichTextEditor } from "@/components/rich-text-editor"
 
 import { type BlockType, type EditorBlock, blockToHtml, buildFullHtml } from "@/lib/email-builder"
 
@@ -82,7 +75,6 @@ function createBlock(type: BlockType): EditorBlock {
   }
 }
 
-// --- Block Editor Component ---
 function BlockEditor({
   blocks,
   setBlocks,
@@ -123,9 +115,7 @@ function BlockEditor({
     const block = blocks.find((b) => b.id === blockId)
     if (!block) return
     const tag = `{{${field}}}`
-    if (block.type === "text" || block.type === "html") {
-      updateBlock(blockId, { content: block.content + tag })
-    } else if (block.type === "button") {
+    if (block.type === "text" || block.type === "html" || block.type === "button") {
       updateBlock(blockId, { content: block.content + tag })
     }
   }
@@ -142,19 +132,18 @@ function BlockEditor({
           }`}
           onClick={() => setActiveBlockId(block.id)}
         >
-          {/* Block toolbar */}
           <div className="flex items-center gap-1 border-b bg-muted/30 px-2 py-1">
             <GripVertical className="size-3.5 text-muted-foreground" />
             <Badge variant="outline" className="text-xs capitalize">
               {block.type}
             </Badge>
             <div className="flex-1" />
-            {/* Merge field button */}
             {(block.type === "text" || block.type === "html" || block.type === "button") && mergeFields.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
-                    {"{{field}}"}
+                    <Braces className="mr-1 size-3.5" />
+                    Insert Field
                     <ChevronDown className="ml-1 size-3" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -167,45 +156,59 @@ function BlockEditor({
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6"
-              aria-label="Move block up"
-              onClick={() => moveBlock(block.id, -1)}
-              disabled={idx === 0}
-            >
-              <ArrowUp className="size-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6"
-              aria-label="Move block down"
-              onClick={() => moveBlock(block.id, 1)}
-              disabled={idx === blocks.length - 1}
-            >
-              <ArrowDown className="size-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-6 text-destructive"
-              aria-label="Remove block"
-              onClick={() => removeBlock(block.id)}
-            >
-              <Trash2 className="size-3" />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    aria-label="Move block up"
+                    onClick={() => moveBlock(block.id, -1)}
+                    disabled={idx === 0}
+                  >
+                    <ArrowUp className="size-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Move up</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    aria-label="Move block down"
+                    onClick={() => moveBlock(block.id, 1)}
+                    disabled={idx === blocks.length - 1}
+                  >
+                    <ArrowDown className="size-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Move down</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 text-destructive"
+                    aria-label="Remove block"
+                    onClick={() => removeBlock(block.id)}
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Remove block</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
-          {/* Block content editor */}
           <div className="p-3">
             {block.type === "text" && (
-              <Textarea
-                className="min-h-[80px] font-mono text-xs"
+              <RichTextEditor
                 value={block.content}
-                onChange={(e) => updateBlock(block.id, { content: e.target.value })}
-                placeholder="Enter HTML content..."
+                onChange={(html) => updateBlock(block.id, { content: html })}
               />
             )}
             {block.type === "image" && (
@@ -372,7 +375,6 @@ function BlockEditor({
         </div>
       ))}
 
-      {/* Add block buttons */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border-2 border-dashed border-border p-4">
         <span className="text-sm text-muted-foreground">Add block:</span>
         <Button variant="outline" size="sm" onClick={() => addBlock("text")}>
@@ -400,7 +402,6 @@ function BlockEditor({
   )
 }
 
-// --- Newsletter Section ---
 export function NewsletterSection() {
   const [newsletters, setNewsletters] = useState<Newsletter[]>([])
   const [senders, setSenders] = useState<Sender[]>([])
@@ -410,7 +411,6 @@ export function NewsletterSection() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
 
-  // Editor state
   const [name, setName] = useState("")
   const [subject, setSubject] = useState("")
   const [senderId, setSenderId] = useState<number | null>(null)
@@ -435,7 +435,6 @@ export function NewsletterSection() {
     void load()
   }, [load])
 
-  // Compute merge fields from selected lists
   const mergeFields = (() => {
     const base = ["email", "firstName", "lastName"]
     const custom = new Set<string>()
@@ -556,10 +555,28 @@ export function NewsletterSection() {
     }
   }
 
-  // --- Main list view ---
+  const previewDialog = (
+    <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      <DialogContent className="max-h-[90vh] sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Email Preview</DialogTitle>
+        </DialogHeader>
+        <div className="overflow-auto rounded border bg-muted/30" style={{ height: "60vh" }}>
+          <iframe
+            ref={previewRef}
+            srcDoc={previewHtml}
+            className="size-full"
+            title="Email preview"
+            sandbox="allow-same-origin"
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+
   if (!dialogOpen) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="content-area">
         <div className="section-header">
           <div>
             <h2 className="section-title">Campaigns</h2>
@@ -573,10 +590,18 @@ export function NewsletterSection() {
 
         {newsletters.length === 0 ? (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <FileEdit className="mb-4 size-12 text-muted-foreground/40" />
-              <CardTitle className="mb-2 text-base">No campaigns yet</CardTitle>
-              <CardDescription>Create your first campaign to start sending emails</CardDescription>
+            <CardContent className="empty-state">
+              <div className="empty-state-icon">
+                <FileEdit className="size-7" />
+              </div>
+              <CardTitle className="empty-state-title">No campaigns yet</CardTitle>
+              <CardDescription className="empty-state-description">
+                Create your first campaign to start sending emails
+              </CardDescription>
+              <Button onClick={openCreate}>
+                <Plus className="mr-2 size-4" />
+                New Campaign
+              </Button>
             </CardContent>
           </Card>
         ) : (
@@ -616,34 +641,51 @@ export function NewsletterSection() {
                         {nl.createdAt ? new Date(nl.createdAt).toLocaleDateString() : "-"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {nl.status === "draft" && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label="Edit campaign"
-                              onClick={() => openEdit(nl)}
-                            >
-                              <Pencil className="size-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Duplicate campaign"
-                            onClick={() => handleDuplicate(nl)}
-                          >
-                            <Copy className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Delete campaign"
-                            onClick={() => handleDelete(nl.id!)}
-                          >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </div>
+                        <TooltipProvider>
+                          <div className="flex items-center justify-end gap-1">
+                            {nl.status === "draft" && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="Edit campaign"
+                                    onClick={() => openEdit(nl)}
+                                  >
+                                    <Pencil className="size-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Edit campaign</TooltipContent>
+                              </Tooltip>
+                            )}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Duplicate campaign"
+                                  onClick={() => handleDuplicate(nl)}
+                                >
+                                  <Copy className="size-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Duplicate campaign</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Delete campaign"
+                                  onClick={() => handleDelete(nl.id!)}
+                                >
+                                  <Trash2 className="size-4 text-destructive" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete campaign</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -653,23 +695,7 @@ export function NewsletterSection() {
           </Card>
         )}
 
-        {/* Preview Dialog */}
-        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-          <DialogContent className="max-h-[90vh] sm:max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Email Preview</DialogTitle>
-            </DialogHeader>
-            <div className="overflow-auto rounded border bg-muted/30" style={{ height: "60vh" }}>
-              <iframe
-                ref={previewRef}
-                srcDoc={previewHtml}
-                className="size-full"
-                title="Email preview"
-                sandbox="allow-same-origin"
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
+        {previewDialog}
 
         <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
           <AlertDialogContent>
@@ -694,9 +720,8 @@ export function NewsletterSection() {
     )
   }
 
-  // --- Editor view ---
   return (
-    <div className="flex flex-col gap-6">
+    <div className="content-area">
       <div className="section-header">
         <div>
           <h2 className="section-title">{editing ? "Edit" : "New"} Campaign</h2>
@@ -715,12 +740,10 @@ export function NewsletterSection() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
-        {/* Editor */}
         <div className="flex flex-col gap-4">
           <BlockEditor blocks={blocks} setBlocks={setBlocks} mergeFields={mergeFields} />
         </div>
 
-        {/* Settings sidebar */}
         <div className="flex flex-col gap-4">
           <Card>
             <CardContent className="p-4">
@@ -785,7 +808,6 @@ export function NewsletterSection() {
             </CardContent>
           </Card>
 
-          {/* Merge fields reference */}
           <Card>
             <CardContent className="p-4">
               <Label className="mb-3 block">Available Merge Fields</Label>
@@ -804,23 +826,7 @@ export function NewsletterSection() {
         </div>
       </div>
 
-      {/* Preview Dialog */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-h-[90vh] sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Email Preview</DialogTitle>
-          </DialogHeader>
-          <div className="overflow-auto rounded border bg-muted/30" style={{ height: "60vh" }}>
-            <iframe
-              ref={previewRef}
-              srcDoc={previewHtml}
-              className="size-full"
-              title="Email preview"
-              sandbox="allow-same-origin"
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
+      {previewDialog}
     </div>
   )
 }

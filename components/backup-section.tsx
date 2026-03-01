@@ -5,7 +5,8 @@ import { DB_SCHEMA_VERSION, db } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Download, Upload, AlertTriangle, CheckCircle2, HardDrive, Loader2 } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Download, Upload, AlertTriangle, Info, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -219,12 +220,14 @@ export function BackupSection() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground">Backup & Restore</h2>
-        <p className="text-sm text-muted-foreground">
-          Export or import all your data including SMTP configs, senders, lists, contacts, campaigns, and send logs
-        </p>
+    <div className="content-area">
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">Backup & Restore</h2>
+          <p className="section-description">
+            Export or import all your data including SMTP configs, senders, lists, contacts, campaigns, and send logs
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -286,30 +289,25 @@ export function BackupSection() {
         </Card>
       </div>
 
-      {/* Info */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-start gap-3">
-            <HardDrive className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
-            <div>
-              <p className="text-sm font-medium text-foreground">About data storage</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                All your data is stored locally in your browser using IndexedDB. Data does not leave your device unless
-                you explicitly send emails. Use the export feature to create backups before clearing browser data or
-                switching devices.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="outline">SMTP Configs</Badge>
-                <Badge variant="outline">Senders</Badge>
-                <Badge variant="outline">Email Lists</Badge>
-                <Badge variant="outline">Contacts</Badge>
-                <Badge variant="outline">Campaigns</Badge>
-                <Badge variant="outline">Send Logs</Badge>
-              </div>
-            </div>
+      <Alert className="bg-muted/20">
+        <Info />
+        <AlertTitle>About data storage</AlertTitle>
+        <AlertDescription>
+          <p>
+            All your data is stored locally in your browser using IndexedDB. Data does not leave your device unless you
+            explicitly send emails.
+          </p>
+          <p>Use the export feature to create backups before clearing browser data or switching devices.</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge variant="outline">SMTP Configs</Badge>
+            <Badge variant="outline">Senders</Badge>
+            <Badge variant="outline">Email Lists</Badge>
+            <Badge variant="outline">Contacts</Badge>
+            <Badge variant="outline">Campaigns</Badge>
+            <Badge variant="outline">Send Logs</Badge>
           </div>
-        </CardContent>
-      </Card>
+        </AlertDescription>
+      </Alert>
 
       {/* Confirm Import Dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

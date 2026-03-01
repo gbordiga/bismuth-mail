@@ -28,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -477,7 +478,7 @@ export function EmailListSection() {
   // --- Render: List View ---
   if (!selectedList) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="content-area">
         <div className="section-header">
           <div>
             <h2 className="section-title">Email Lists</h2>
@@ -522,30 +523,42 @@ export function EmailListSection() {
                         {list.description || "No description"}
                       </p>
                     </div>
-                    <div className="ml-3 flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Edit list ${list.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          openEditList(list)
-                        }}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Delete list ${list.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteList(list.id!)
-                        }}
-                      >
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
-                    </div>
+                    <TooltipProvider>
+                      <div className="ml-3 flex items-center gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Edit list ${list.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openEditList(list)
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Edit list</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Delete list ${list.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteList(list.id!)
+                              }}
+                            >
+                              <Trash2 className="size-4 text-destructive" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete list</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TooltipProvider>
                   </div>
                   <div className="mt-4 flex items-center gap-3">
                     <Badge variant="secondary">
@@ -666,12 +679,19 @@ export function EmailListSection() {
 
   // --- Render: Contact Detail View ---
   return (
-    <div className="flex flex-col gap-6">
+    <div className="content-area">
       <div className="section-header">
         <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => setSelectedList(null)}>
-          <ArrowLeft className="size-4" />
-        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedList(null)} aria-label="Back to lists">
+                <ArrowLeft className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Back to lists</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <div className="flex-1">
           <h2 className="section-title">{selectedList.name}</h2>
           <p className="section-description">
@@ -800,24 +820,36 @@ export function EmailListSection() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Edit contact"
-                          onClick={() => openEditContact(contact)}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Delete contact"
-                          onClick={() => handleDeleteContact(contact.id!)}
-                        >
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
-                      </div>
+                      <TooltipProvider>
+                        <div className="flex items-center justify-end gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Edit contact"
+                                onClick={() => openEditContact(contact)}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit contact</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Delete contact"
+                                onClick={() => handleDeleteContact(contact.id!)}
+                              >
+                                <Trash2 className="size-4 text-destructive" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete contact</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
                     </TableCell>
                   </TableRow>
                 ))}

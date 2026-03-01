@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useSending } from "@/lib/sending-context"
 import { ChangelogModal } from "@/components/changelog-modal"
 
@@ -21,6 +22,17 @@ const navItems = [
 ] as const
 
 export type NavSection = (typeof navItems)[number]["id"]
+type NavGroup = {
+  label: string
+  items: ReadonlyArray<(typeof navItems)[number]>
+}
+
+const navGroups: NavGroup[] = [
+  { label: "Setup", items: [navItems[0], navItems[1]] },
+  { label: "Content", items: [navItems[2], navItems[3]] },
+  { label: "Deliver", items: [navItems[4]] },
+  { label: "System", items: [navItems[5]] },
+]
 
 function getActiveSection(pathname: string): NavSection {
   const item = navItems.find((entry) => pathname === entry.href || pathname.startsWith(`${entry.href}/`))
@@ -62,44 +74,56 @@ export function AppShell({ children }: AppShellProps) {
             <Mail className="size-4 text-primary-foreground" />
           </div>
           <span className="text-base font-semibold text-foreground">Bismuth Mail</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-auto lg:hidden"
-            onClick={() => setMobileOpen(false)}
-            aria-label="Close sidebar"
-          >
-            <X className="size-4" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-auto lg:hidden"
+                  onClick={() => setMobileOpen(false)}
+                  aria-label="Close sidebar"
+                >
+                  <X className="size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Close sidebar</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
-        <nav className="flex-1 p-3">
-          <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive = activeSection === item.id
-              return (
-                <li key={item.id}>
-                  <Link
-                    href={item.href}
-                    aria-current={isActive ? "page" : undefined}
-                    onClick={() => setMobileOpen(false)}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4 shrink-0" />
-                    {item.label}
-                    {item.id === "send" && sending && (
-                      <span className="ml-auto size-2 shrink-0 rounded-full bg-primary animate-pulse" />
-                    )}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
+        <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+          {navGroups.map((group) => (
+            <div key={group.label} className="space-y-1.5">
+              <p className="px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{group.label}</p>
+              <ul className="flex flex-col gap-1">
+                {group.items.map((item) => {
+                  const Icon = item.icon
+                  const isActive = activeSection === item.id
+                  return (
+                    <li key={item.id}>
+                      <Link
+                        href={item.href}
+                        aria-current={isActive ? "page" : undefined}
+                        onClick={() => setMobileOpen(false)}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                          isActive
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                        )}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        {item.label}
+                        {item.id === "send" && sending && (
+                          <span className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-primary" />
+                        )}
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
 
           {sending && (
             <Link
@@ -135,26 +159,36 @@ export function AppShell({ children }: AppShellProps) {
             </Link>
           )}
         </nav>
-        <div className="border-t p-4 flex items-center justify-between">
-          <button
-            onClick={() => setChangelogOpen(true)}
-            className="text-left hover:opacity-80 transition-opacity"
-          >
-            <p className="text-xs text-muted-foreground">Stored locally in IndexedDB</p>
-            <p className="text-[10px] text-muted-foreground/60 hover:text-primary transition-colors cursor-pointer">
-              v{process.env.NEXT_PUBLIC_APP_VERSION} · View changelog
-            </p>
-          </button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            aria-label="Toggle theme"
-          >
-            <Sun className="size-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute size-4 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
-          </Button>
+        <div className="border-t bg-muted/20 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={() => setChangelogOpen(true)}
+              className="text-left transition-opacity hover:opacity-80"
+            >
+              <p className="text-xs font-medium text-foreground/90">Local-first storage</p>
+              <p className="text-[11px] text-muted-foreground">Data is stored in IndexedDB on this device</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:text-primary">
+                v{process.env.NEXT_PUBLIC_APP_VERSION} · View changelog
+              </p>
+            </button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    aria-label="Toggle theme"
+                  >
+                    <Sun className="size-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
+                    <Moon className="absolute size-4 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Toggle theme</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         </div>
       </aside>
 

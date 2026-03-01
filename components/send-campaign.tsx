@@ -250,10 +250,12 @@ export function SendCampaignSection() {
     sendProgress.total > 0 ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100 : 0
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="section-title">Send Campaign</h2>
-        <p className="section-description">Select a campaign and send it to your subscribers</p>
+    <div className="content-area">
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">Send Campaign</h2>
+          <p className="section-description">Select a campaign and send it to your subscribers</p>
+        </div>
       </div>
 
       <Card>
@@ -289,34 +291,45 @@ export function SendCampaignSection() {
               </Select>
             </div>
 
+            {!selectedNl && (
+              <div className="empty-state py-10">
+                <div className="empty-state-icon">
+                  <Send className="size-7" />
+                </div>
+                <p className="empty-state-title">
+                  {newsletters.length === 0 ? "No campaigns available" : "Select a campaign to continue"}
+                </p>
+                <p className="empty-state-description">
+                  {newsletters.length === 0
+                    ? "Create a campaign in the Campaigns section, then come back here to send it."
+                    : "Pick a campaign from the dropdown to preview settings, run tests, and send."}
+                </p>
+              </div>
+            )}
+
             {selectedNl && (
-              <div className="status-panel p-4">
-                <div className="grid gap-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Subject:</span>
-                    <span className="font-medium text-foreground">{selectedNl.subject}</span>
+              <div className="status-panel p-5">
+                <div className="grid gap-4 text-sm md:grid-cols-[140px_1fr]">
+                  <span className="text-muted-foreground">Subject</span>
+                  <span className="font-medium text-foreground">{selectedNl.subject}</span>
+
+                  <span className="text-muted-foreground">Sender</span>
+                  <span className="text-foreground">
+                    {senders.find((s) => s.id === selectedNl.senderId)?.name || "Not set"}
+                  </span>
+
+                  <span className="text-muted-foreground">Target Lists</span>
+                  <div className="flex flex-wrap gap-1">
+                    {selectedNl.listIds.map((lid) => (
+                      <Badge key={lid} variant="outline" className="text-xs">
+                        {lists.find((l) => l.id === lid)?.name || "Unknown"}
+                      </Badge>
+                    ))}
+                    {selectedNl.listIds.length === 0 && <span className="text-muted-foreground">No lists selected</span>}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Sender:</span>
-                    <span className="text-foreground">
-                      {senders.find((s) => s.id === selectedNl.senderId)?.name || "Not set"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Target Lists:</span>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedNl.listIds.map((lid) => (
-                        <Badge key={lid} variant="outline" className="text-xs">
-                          {lists.find((l) => l.id === lid)?.name || "Unknown"}
-                        </Badge>
-                      ))}
-                      {selectedNl.listIds.length === 0 && (
-                        <span className="text-muted-foreground">No lists selected</span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Status:</span>
+
+                  <span className="text-muted-foreground">Status</span>
+                  <div>
                     <Badge
                       variant={selectedNl.status === "draft" ? "secondary" : "default"}
                       className={selectedNl.status === "sent" ? "bg-success text-success-foreground" : ""}

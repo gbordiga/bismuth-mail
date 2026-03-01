@@ -5,7 +5,6 @@ import { db, type Sender, type SmtpConfig } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Plus, Pencil, Trash2, Mail } from "lucide-react"
 import { toast } from "sonner"
+import { RichTextEditor } from "@/components/rich-text-editor"
 
 const emptySender: Omit<Sender, "id" | "createdAt"> = {
   name: "",
@@ -46,7 +47,6 @@ export function SenderSection() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [form, setForm] = useState(emptySender)
-  const [previewSig, setPreviewSig] = useState(false)
 
   const load = useCallback(async () => {
     const [allSenders, allSmtp] = await Promise.all([
@@ -120,7 +120,7 @@ export function SenderSection() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="content-area">
       <div className="section-header">
         <div>
           <h2 className="section-title">Senders</h2>
@@ -144,10 +144,18 @@ export function SenderSection() {
 
       {senders.length === 0 && smtpConfigs.length > 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Mail className="mb-4 size-12 text-muted-foreground/40" />
-            <CardTitle className="mb-2 text-base">No senders configured</CardTitle>
-            <CardDescription>Add a sender identity with name, email, and signature</CardDescription>
+          <CardContent className="empty-state">
+            <div className="empty-state-icon">
+              <Mail className="size-7" />
+            </div>
+            <CardTitle className="empty-state-title">No senders configured</CardTitle>
+            <CardDescription className="empty-state-description">
+              Add a sender identity with name, email, and signature
+            </CardDescription>
+            <Button onClick={openCreate}>
+              <Plus className="mr-2 size-4" />
+              Add Sender
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -172,19 +180,36 @@ export function SenderSection() {
                       <TableCell className="font-mono text-xs">{sender.replyTo || "Same"}</TableCell>
                       <TableCell>{getSmtpName(sender.smtpConfigId)}</TableCell>
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" aria-label="Edit sender" onClick={() => openEdit(sender)}>
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Delete sender"
-                            onClick={() => handleDelete(sender.id!)}
-                          >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </div>
+                        <TooltipProvider>
+                          <div className="flex items-center justify-end gap-1">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Edit sender"
+                                  onClick={() => openEdit(sender)}
+                                >
+                                  <Pencil className="size-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Edit sender</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Delete sender"
+                                  onClick={() => handleDelete(sender.id!)}
+                                >
+                                  <Trash2 className="size-4 text-destructive" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete sender</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -202,94 +227,87 @@ export function SenderSection() {
             <DialogDescription>Configure the sender identity that recipients will see</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="sender-name">Sender Name *</Label>
-                <Input
-                  id="sender-name"
-                  placeholder="e.g. John from Company"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
+            <div className="grid gap-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Identity</p>
+            </div>
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="sender-name">Sender Name *</Label>
+                  <Input
+                    id="sender-name"
+                    placeholder="e.g. John from Company"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="sender-email">Sender Email *</Label>
+                  <Input
+                    id="sender-email"
+                    type="email"
+                    placeholder="john@company.com"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="sender-email">Sender Email *</Label>
-                <Input
-                  id="sender-email"
-                  type="email"
-                  placeholder="john@company.com"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                />
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="sender-reply">Reply-To (optional)</Label>
+                  <Input
+                    id="sender-reply"
+                    type="email"
+                    placeholder="support@company.com"
+                    value={form.replyTo}
+                    onChange={(e) => setForm({ ...form, replyTo: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="sender-unsub">Unsubscribe Email *</Label>
+                  <Input
+                    id="sender-unsub"
+                    type="email"
+                    placeholder="unsubscribe@company.com"
+                    value={form.unsubscribeEmail}
+                    onChange={(e) => setForm({ ...form, unsubscribeEmail: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Recipients will be prompted to send an email here to unsubscribe.
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="sender-reply">Reply-To (optional)</Label>
-                <Input
-                  id="sender-reply"
-                  type="email"
-                  placeholder="support@company.com"
-                  value={form.replyTo}
-                  onChange={(e) => setForm({ ...form, replyTo: e.target.value })}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="sender-unsub">Unsubscribe Email *</Label>
-                <Input
-                  id="sender-unsub"
-                  type="email"
-                  placeholder="unsubscribe@company.com"
-                  value={form.unsubscribeEmail}
-                  onChange={(e) => setForm({ ...form, unsubscribeEmail: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Recipients will be prompted to send an email here to unsubscribe.
-                </p>
-              </div>
+            <div className="grid gap-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Configuration</p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="sender-smtp">SMTP Server *</Label>
-              <Select
-                value={String(form.smtpConfigId)}
-                onValueChange={(v) => setForm({ ...form, smtpConfigId: parseInt(v) })}
-              >
-                <SelectTrigger id="sender-smtp" className="w-full">
-                  <SelectValue placeholder="Select server" />
-                </SelectTrigger>
-                <SelectContent>
-                  {smtpConfigs.map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="sender-sig">Signature (HTML)</Label>
-                <Button variant="ghost" size="sm" onClick={() => setPreviewSig(!previewSig)}>
-                  {previewSig ? "Edit" : "Preview"}
-                </Button>
+            <div className="rounded-lg border bg-muted/20 p-4">
+              <div className="grid gap-2">
+                <Label htmlFor="sender-smtp">SMTP Server *</Label>
+                <Select
+                  value={String(form.smtpConfigId)}
+                  onValueChange={(v) => setForm({ ...form, smtpConfigId: parseInt(v) })}
+                >
+                  <SelectTrigger id="sender-smtp" className="w-full">
+                    <SelectValue placeholder="Select server" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {smtpConfigs.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              {previewSig ? (
-                <iframe
-                  srcDoc={`<!DOCTYPE html><html><head><style>body{font-family:sans-serif;margin:8px;color:#18181b;}</style></head><body>${form.signature}</body></html>`}
-                  className="min-h-[120px] w-full rounded-lg border bg-card"
-                  title="Signature preview"
-                  sandbox=""
-                />
-              ) : (
-                <Textarea
-                  id="sender-sig"
-                  placeholder={"<p>Best regards,<br/><strong>John</strong></p>"}
-                  rows={5}
-                  className="font-mono text-xs"
+              <div className="mt-4 grid gap-2">
+                <Label>Signature</Label>
+                <RichTextEditor
                   value={form.signature}
-                  onChange={(e) => setForm({ ...form, signature: e.target.value })}
+                  onChange={(html) => setForm({ ...form, signature: html })}
+                  minHeight="120px"
                 />
-              )}
+              </div>
             </div>
           </div>
           <DialogFooter>

@@ -18,6 +18,17 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Plus, Pencil, Trash2, Server, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
@@ -35,6 +46,7 @@ const emptyConfig: Omit<SmtpConfig, "id" | "createdAt"> = {
 export function SmtpConfigSection() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [form, setForm] = useState(emptyConfig)
   const [testing, setTesting] = useState(false)
 
@@ -93,7 +105,13 @@ export function SmtpConfigSection() {
       toast.error("Cannot delete: this config is used by one or more senders")
       return
     }
-    await db.smtpConfigs.delete(id)
+    setPendingDeleteId(id)
+  }
+
+  async function confirmDelete() {
+    if (!pendingDeleteId) return
+    await db.smtpConfigs.delete(pendingDeleteId)
+    setPendingDeleteId(null)
     toast.success("SMTP configuration deleted")
     loadConfigs()
   }
@@ -120,7 +138,7 @@ export function SmtpConfigSection() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="content-area">
       <div className="section-header">
         <div>
           <h2 className="section-title">SMTP Servers</h2>
@@ -141,10 +159,18 @@ export function SmtpConfigSection() {
         </Card>
       ) : configs.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Server className="mb-4 size-12 text-muted-foreground/40" />
-            <CardTitle className="mb-2 text-base">No SMTP servers configured</CardTitle>
-            <CardDescription>Add your first SMTP server to start sending emails</CardDescription>
+          <CardContent className="empty-state">
+            <div className="empty-state-icon">
+              <Server className="size-7" />
+            </div>
+            <CardTitle className="empty-state-title">No SMTP servers configured</CardTitle>
+            <CardDescription className="empty-state-description">
+              Add your first SMTP server to start sending emails
+            </CardDescription>
+            <Button onClick={openCreate}>
+              <Plus className="mr-2 size-4" />
+              Add Server
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -179,24 +205,36 @@ export function SmtpConfigSection() {
                     </TableCell>
                     <TableCell className="font-mono text-xs">{config.username}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Edit SMTP config"
-                          onClick={() => openEdit(config)}
-                        >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Delete SMTP config"
-                          onClick={() => handleDelete(config.id!)}
-                        >
-                          <Trash2 className="size-4 text-destructive" />
-                        </Button>
-                      </div>
+                      <TooltipProvider>
+                        <div className="flex items-center justify-end gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Edit SMTP config"
+                                onClick={() => openEdit(config)}
+                              >
+                                <Pencil className="size-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit SMTP config</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Delete SMTP config"
+                                onClick={() => handleDelete(config.id!)}
+                              >
+                                <Trash2 className="size-4 text-destructive" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete SMTP config</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -215,6 +253,9 @@ export function SmtpConfigSection() {
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
+            <div className="grid gap-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Connection</p>
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="smtp-name">Configuration Name *</Label>
               <Input
@@ -306,6 +347,9 @@ export function SmtpConfigSection() {
             </div>
           </div>
           <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
             <Button variant="outline" onClick={handleTest} disabled={testing || !form.host}>
               {testing ? "Testing..." : "Test Connection"}
             </Button>
@@ -313,6 +357,26 @@ export function SmtpConfigSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete SMTP server?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This configuration will be permanently removed. Senders that use this SMTP server must be reassigned first.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDelete}
+            >
+              Delete server
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
