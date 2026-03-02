@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import DOMPurify from "isomorphic-dompurify"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -96,17 +97,86 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(/<\/(p|div)>/gi, "\n")
   md = md.replace(/<\/(ul|ol)>/gi, "\n")
 
-  md = md.replace(/<[^>]+>/g, "")
-
-  md = md
-    .replace(/&nbsp;/g, " ")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&amp;/g, "&")
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(md, "text/html")
+  md = (doc.body.textContent || "").replace(/\u00a0/g, " ")
 
   return md.replace(/\n{3,}/g, "\n\n").trim()
+}
+
+function sanitizeLinkHref(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim()
+  if (!trimmed) return null
+
+  try {
+    const url = new URL(trimmed, window.location.origin)
+    if (url.protocol === "http:" || url.protocol === "https:" || url.protocol === "mailto:" || url.protocol === "tel:") {
+      return url.href
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+const EDITOR_ALLOWED_TAGS = [
+  "a",
+  "b",
+  "blockquote",
+  "br",
+  "code",
+  "del",
+  "div",
+  "em",
+  "h1",
+  "h2",
+  "h3",
+  "i",
+  "li",
+  "ol",
+  "p",
+  "pre",
+  "s",
+  "span",
+  "strike",
+  "strong",
+  "u",
+  "ul",
+]
+
+function sanitizeEditorHtml(rawHtml: string): string {
+  const purified = DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: EDITOR_ALLOWED_TAGS,
+    ALLOWED_ATTR: ["href", "title", "target", "rel"],
+    ALLOW_DATA_ATTR: false,
+    FORBID_ATTR: ["style"],
+  })
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(purified, "text/html")
+  for (const anchor of Array.from(doc.querySelectorAll("a[href]"))) {
+    const safeHref = sanitizeLinkHref(anchor.getAttribute("href") || "")
+    if (!safeHref) {
+      anchor.removeAttribute("href")
+      continue
+    }
+    anchor.setAttribute("href", safeHref)
+
+    if (anchor.getAttribute("target") === "_blank") {
+      const rel = new Set((anchor.getAttribute("rel") || "").split(/\s+/).filter(Boolean))
+      rel.add("noopener")
+      rel.add("noreferrer")
+      anchor.setAttribute("rel", Array.from(rel).join(" "))
+    }
+  }
+  return doc.body.innerHTML
+}
+
+function setEditorHtml(target: HTMLDivElement, html: string) {
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, "text/html")
+  target.replaceChildren(...Array.from(doc.body.childNodes))
 }
 
 export function RichTextEditor({
@@ -123,25 +193,20 @@ export function RichTextEditor({
   const [mode, setMode] = useState<"visual" | "source" | "html">("visual")
   const [mdSource, setMdSource] = useState(() => htmlToMarkdown(value))
   const [htmlSource, setHtmlSource] = useState(value)
-  const isInternalUpdate = useRef(false)
+  const [hasLocalDraft, setHasLocalDraft] = useState(false)
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState("https://")
   const [linkText, setLinkText] = useState("")
 
-  useEffect(() => {
-    if (isInternalUpdate.current) {
-      isInternalUpdate.current = false
-      return
-    }
-    setMdSource(htmlToMarkdown(value))
-    setHtmlSource(value)
-  }, [value])
+  const currentMdSource = hasLocalDraft ? mdSource : htmlToMarkdown(value)
+  const currentHtmlSource = hasLocalDraft ? htmlSource : value
 
   useEffect(() => {
     if (mode !== "visual" || !editableRef.current) return
-    if (editableRef.current.innerHTML !== value) {
-      editableRef.current.innerHTML = value
+    const safeHtml = sanitizeEditorHtml(value)
+    if (editableRef.current.innerHTML !== safeHtml) {
+      setEditorHtml(editableRef.current, safeHtml)
     }
   }, [mode, value])
 
@@ -169,11 +234,12 @@ export function RichTextEditor({
   }
 
   function emitChange() {
-    const html = editableRef.current?.innerHTML || ""
-    isInternalUpdate.current = true
+    const rawHtml = editableRef.current?.innerHTML || ""
+    const html = sanitizeEditorHtml(rawHtml)
     onChange(html)
     setMdSource(htmlToMarkdown(html))
     setHtmlSource(html)
+    setHasLocalDraft(false)
   }
 
   function openLinkDialog(e: React.MouseEvent) {
@@ -188,7 +254,8 @@ export function RichTextEditor({
 
   function confirmLink() {
     setLinkDialogOpen(false)
-    if (!linkUrl) return
+    const safeHref = sanitizeLinkHref(linkUrl)
+    if (!safeHref) return
     restoreSelection()
     editableRef.current?.focus()
 
@@ -197,8 +264,8 @@ export function RichTextEditor({
       const range = sel.getRangeAt(0)
       range.deleteContents()
       const anchor = document.createElement("a")
-      anchor.href = linkUrl
-      anchor.textContent = linkText || linkUrl
+      anchor.href = safeHref
+      anchor.textContent = linkText || safeHref
       range.insertNode(anchor)
       range.setStartAfter(anchor)
       range.collapse(true)
@@ -227,42 +294,54 @@ export function RichTextEditor({
 
   function switchToSource() {
     const currentHtml =
-      mode === "visual" ? editableRef.current?.innerHTML || value : mode === "html" ? htmlSource : markdownToHtml(mdSource)
+      mode === "visual"
+        ? editableRef.current?.innerHTML || value
+        : mode === "html"
+          ? currentHtmlSource
+          : markdownToHtml(currentMdSource)
     setMdSource(htmlToMarkdown(currentHtml))
     setHtmlSource(currentHtml)
+    setHasLocalDraft(true)
     setMode("source")
   }
 
   function switchToVisual() {
-    const html = mode === "html" ? htmlSource : markdownToHtml(mdSource)
-    isInternalUpdate.current = true
+    const rawHtml = mode === "html" ? currentHtmlSource : markdownToHtml(currentMdSource)
+    const html = sanitizeEditorHtml(rawHtml)
     onChange(html)
     setHtmlSource(html)
     setMdSource(htmlToMarkdown(html))
+    setHasLocalDraft(false)
     setMode("visual")
   }
 
   function switchToHtml() {
     const currentHtml =
-      mode === "visual" ? editableRef.current?.innerHTML || value : mode === "source" ? markdownToHtml(mdSource) : htmlSource
+      mode === "visual"
+        ? editableRef.current?.innerHTML || value
+        : mode === "source"
+          ? markdownToHtml(currentMdSource)
+          : currentHtmlSource
     setHtmlSource(currentHtml)
     setMdSource(htmlToMarkdown(currentHtml))
+    setHasLocalDraft(true)
     setMode("html")
   }
 
   function handleSourceChange(nextMd: string) {
     setMdSource(nextMd)
-    const html = markdownToHtml(nextMd)
+    const html = sanitizeEditorHtml(markdownToHtml(nextMd))
     setHtmlSource(html)
-    isInternalUpdate.current = true
+    setHasLocalDraft(true)
     onChange(html)
   }
 
   function handleHtmlChange(nextHtml: string) {
+    const safeHtml = sanitizeEditorHtml(nextHtml)
     setHtmlSource(nextHtml)
-    setMdSource(htmlToMarkdown(nextHtml))
-    isInternalUpdate.current = true
-    onChange(nextHtml)
+    setMdSource(htmlToMarkdown(safeHtml))
+    setHasLocalDraft(true)
+    onChange(safeHtml)
   }
 
   const tb = "h-7 w-7 p-0"
@@ -439,7 +518,7 @@ export function RichTextEditor({
         <Textarea
           className="bg-white font-mono text-xs"
           style={{ minHeight }}
-          value={mdSource}
+          value={currentMdSource}
           onChange={(e) => handleSourceChange(e.target.value)}
           placeholder={"# Heading\n\nWrite **bold**, *italic*, and [links](https://...) in markdown."}
         />
@@ -447,7 +526,7 @@ export function RichTextEditor({
         <Textarea
           className="bg-white font-mono text-xs"
           style={{ minHeight }}
-          value={htmlSource}
+          value={currentHtmlSource}
           onChange={(e) => handleHtmlChange(e.target.value)}
           placeholder={"<p>Write raw HTML here...</p>"}
         />
