@@ -1,4 +1,12 @@
 versions:
+  - version: 0.2.9
+    date: 2026-04-10
+    changes:
+      - type: changed
+        items:
+          - Bumped Next.js to `16.2.3`, React / React DOM to `19.2.5`, and `eslint-config-next` to `16.2.3` (security fixes in the framework and aligned lint config)
+          - Added explicit `vite` `^7.3.2` as a dev dependency so the Vitest toolchain resolves a patched Vite and `pnpm audit` reports no known vulnerabilities
+
   - version: 0.2.8
     date: 2026-03-01
     changes:
