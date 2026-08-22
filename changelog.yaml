@@ -11,7 +11,7 @@ versions:
 
       - type: fixed
         items:
-          - Stopped decoding leftover HTML through `DOMParser` in `htmlToMarkdown` to avoid treating editor text as live markup
+          - Stripped leftover tags in `htmlToMarkdown` with DOMPurify instead of `DOMParser` or a one-pass regex
 
   - version: 0.2.9
     date: 2026-04-10
