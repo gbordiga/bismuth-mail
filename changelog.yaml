@@ -1,4 +1,12 @@
 versions:
+  - version: 0.2.11
+    date: 2026-08-22
+    changes:
+      - type: changed
+        items:
+          - Bumped Next.js, React, and `eslint-config-next` to `16.3.2` / `19.2.8`, plus the remaining Radix, Tailwind, Zod, Vite, and editor-stack packages
+          - Upgraded `lucide-react` to `1.x`, TypeScript to `6.x`, and `@types/node` to `26.x`; CI now runs on Node 22. ESLint stays on `9.x` and TypeScript on `6.x` because `eslint-config-next` does not support ESLint 10 or TypeScript 7 yet
+
   - version: 0.2.10
     date: 2026-08-22
     changes:
