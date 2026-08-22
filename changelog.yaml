@@ -7,7 +7,7 @@ versions:
           - Bumped Next.js and `eslint-config-next` to `16.2.11` to close the August 2026 framework advisories (middleware/proxy bypass, SSRF, cache confusion, Server Action DoS)
           - Bumped `nodemailer` to `9.0.5` and enabled `disableFileAccess` / `disableUrlAccess` on all SMTP transports
           - Bumped PostCSS to `8.5.26`, Vite to `7.3.6`, Vitest to `4.1.11`, and selected Radix packages; updated GitHub Actions (`checkout` 7, `setup-node` 7, `pnpm/action-setup` 6)
-          - Pinned patched transitive versions via `pnpm-workspace.yaml` overrides for `dompurify`, `undici`, `nanoid`, `js-yaml`, `brace-expansion`, and `sharp`
+          - Pinned patched transitive versions via `pnpm-workspace.yaml` overrides for `dompurify`, `undici`, `nanoid`, `js-yaml`, `brace-expansion`, `sharp`, `esbuild`, and `@babel/core`
 
       - type: fixed
         items:
