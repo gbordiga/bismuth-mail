@@ -97,9 +97,13 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(/<\/(p|div)>/gi, "\n")
   md = md.replace(/<\/(ul|ol)>/gi, "\n")
 
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(md, "text/html")
-  md = (doc.body.textContent || "").replace(/\u00a0/g, " ")
+  md = DOMPurify.sanitize(md, {
+    ALLOWED_TAGS: [],
+    ALLOWED_ATTR: [],
+    KEEP_CONTENT: true,
+  })
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\u00a0/g, " ")
 
   return md.replace(/\n{3,}/g, "\n\n").trim()
 }

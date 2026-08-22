@@ -23,6 +23,8 @@ export async function POST(req: Request) {
       port: smtp.port,
       secure: smtp.secure,
       auth: smtp.auth,
+      disableFileAccess: true,
+      disableUrlAccess: true,
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 30000,
