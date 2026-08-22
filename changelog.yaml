@@ -1,4 +1,18 @@
 versions:
+  - version: 0.2.10
+    date: 2026-08-22
+    changes:
+      - type: changed
+        items:
+          - Bumped Next.js and `eslint-config-next` to `16.2.11` to close the August 2026 framework advisories (middleware/proxy bypass, SSRF, cache confusion, Server Action DoS)
+          - Bumped `nodemailer` to `9.0.5` and enabled `disableFileAccess` / `disableUrlAccess` on all SMTP transports
+          - Bumped PostCSS to `8.5.26`, Vite to `7.3.6`, Vitest to `4.1.11`, and selected Radix packages; updated GitHub Actions (`checkout` 7, `setup-node` 7, `pnpm/action-setup` 6)
+          - Pinned patched transitive versions via `pnpm-workspace.yaml` overrides for `dompurify`, `undici`, `nanoid`, `js-yaml`, `brace-expansion`, and `sharp`
+
+      - type: fixed
+        items:
+          - Stopped decoding leftover HTML through `DOMParser` in `htmlToMarkdown` to avoid treating editor text as live markup
+
   - version: 0.2.9
     date: 2026-04-10
     changes:

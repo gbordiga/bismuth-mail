@@ -165,6 +165,8 @@ export async function POST(req: Request) {
       pool: true,
       maxConnections,
       maxMessages: Infinity,
+      disableFileAccess: true,
+      disableUrlAccess: true,
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 30000,

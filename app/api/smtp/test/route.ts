@@ -24,6 +24,8 @@ export async function POST(req: Request) {
         user: username,
         pass: password,
       },
+      disableFileAccess: true,
+      disableUrlAccess: true,
       connectionTimeout: 10000,
       greetingTimeout: 10000,
     })
