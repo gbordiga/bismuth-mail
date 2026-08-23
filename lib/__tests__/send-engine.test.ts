@@ -70,12 +70,15 @@ describe("sendLogWritePayload", () => {
         contactName: "Ada",
         status: "sent",
         attempt: 2,
+        error: "Invalid request payload",
+        errorDetail: '{"code":"VALIDATION_ERROR"}',
         sentAt: new Date("2026-08-23T00:00:00.000Z"),
       }),
     ).toMatchObject({
       contactEmail: "ada@example.com",
       status: "sent",
       error: "",
+      errorDetail: "",
     })
   })
 })

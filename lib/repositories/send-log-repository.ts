@@ -14,6 +14,7 @@ export async function upsertSendLog(log: Omit<SendLog, "id">): Promise<void> {
       status: payload.status,
       attempt: payload.attempt,
       error: payload.error,
+      errorDetail: payload.errorDetail,
       sentAt: payload.sentAt,
     })
     return

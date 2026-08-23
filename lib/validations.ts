@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+export const SIGNATURE_MAX_CHARS = 5_000_000
+
 export const smtpTestSchema = z.object({
   host: z.string().min(1),
   port: z.coerce.number().int().min(1).max(65535),
@@ -65,7 +67,7 @@ export const smtpSendBatchSchema = z.object({
   replyTo: z.email().optional().or(z.literal("")),
   subjectTemplate: z.string().min(1).max(998),
   blocks: z.array(editorBlockSchema).min(1),
-  signature: z.string().max(10_000).prefault(""),
+  signature: z.string().max(SIGNATURE_MAX_CHARS).prefault(""),
   unsubscribeEmail: z.email(),
   contacts: z.array(
     z.object({

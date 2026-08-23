@@ -40,10 +40,12 @@ export function resolveCompletedCampaignStatus(
 
 /** Always persist a defined error so a later success overwrites a previous failure. */
 export function sendLogWritePayload(log: Omit<SendLog, "id">): Omit<SendLog, "id"> {
+  const succeeded = log.status === "sent"
   return {
     ...log,
     contactEmail: normalizeEmail(log.contactEmail),
-    error: log.error ?? "",
+    error: succeeded ? "" : (log.error ?? ""),
+    errorDetail: succeeded ? "" : (log.errorDetail ?? ""),
   }
 }
 

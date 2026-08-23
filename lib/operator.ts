@@ -33,12 +33,12 @@ export function filterCampaigns<T extends { id?: number; name: string; subject: 
 export type SendLogFilter = "all" | "sent" | "failed"
 
 export function filterSendLogs<
-  T extends { status: string; contactEmail: string; contactName: string; error?: string },
+  T extends { status: string; contactEmail: string; contactName: string; error?: string; errorDetail?: string },
 >(logs: T[], filter: SendLogFilter, query: string): T[] {
   return logs.filter((log) => {
     if (filter === "sent" && log.status !== "sent") return false
     if (filter === "failed" && log.status !== "failed") return false
-    return matchesQuery(query, log.contactEmail, log.contactName, log.error)
+    return matchesQuery(query, log.contactEmail, log.contactName, log.error, log.errorDetail)
   })
 }
 
@@ -96,4 +96,35 @@ export function campaignLeaveAction(isDirty: boolean, canPersist: boolean): Camp
   if (!isDirty) return "close"
   if (canPersist) return "save"
   return "confirm"
+}
+
+export type CampaignPhase = "compose" | "send" | "logs"
+
+export function campaignDefaultPhase(
+  status: "draft" | "sending" | "sent" | "sent_with_errors",
+): CampaignPhase {
+  if (status === "draft") return "compose"
+  if (status === "sending") return "send"
+  return "logs"
+}
+
+export function campaignListPath(): string {
+  return "/campaigns"
+}
+
+export function campaignNewPath(): string {
+  return "/campaigns/new"
+}
+
+export function campaignWorkspacePath(id: number): string {
+  return `/campaigns/${id}`
+}
+
+export function campaignPhasePath(id: number, phase: CampaignPhase): string {
+  return `/campaigns/${id}/${phase}`
+}
+
+export function parseCampaignId(raw: string): number | null {
+  const id = Number(raw)
+  return Number.isInteger(id) && id > 0 ? id : null
 }

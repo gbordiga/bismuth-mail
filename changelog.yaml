@@ -1,4 +1,20 @@
 versions:
+  - version: 0.5.0
+    date: 2026-08-23
+    changes:
+      - type: changed
+        items:
+          - Campaigns is now one workspace with Compose, Send, and Logs instead of a separate Send Campaign section
+          - Sidebar navigation drops Deliver; send progress opens the campaign that is sending
+          - "/editor and /send redirect into /campaigns"
+      - type: added
+        items:
+          - "Campaign routes /campaigns, /campaigns/new, and /campaigns/:id/compose|send|logs"
+          - Failed send logs can open, copy, and download the complete API or SMTP error payload
+      - type: fixed
+        items:
+          - Campaign send no longer rejects sender signatures over 10,000 characters
+
   - version: 0.4.3
     date: 2026-08-23
     changes:

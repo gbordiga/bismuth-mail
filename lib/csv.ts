@@ -50,8 +50,8 @@ export function serializeCSV(rows: string[][]): string {
   return rows.map((row) => row.map((cell) => escapeCsvCell(cell ?? "")).join(",")).join("\n")
 }
 
-export function downloadCsv(filename: string, rows: string[][]): void {
-  const blob = new Blob([serializeCSV(rows)], { type: "text/csv;charset=utf-8" })
+export function downloadText(filename: string, content: string, mimeType = "text/plain;charset=utf-8"): void {
+  const blob = new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
   const a = document.createElement("a")
   a.href = url
@@ -60,4 +60,12 @@ export function downloadCsv(filename: string, rows: string[][]): void {
   a.click()
   document.body.removeChild(a)
   URL.revokeObjectURL(url)
+}
+
+export function downloadJson(filename: string, content: string): void {
+  downloadText(filename, content, "application/json;charset=utf-8")
+}
+
+export function downloadCsv(filename: string, rows: string[][]): void {
+  downloadText(filename, serializeCSV(rows), "text/csv;charset=utf-8")
 }

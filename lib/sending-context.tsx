@@ -12,6 +12,7 @@ import {
   selectContactsToSend,
   summarizeSendLogs,
 } from "@/lib/send-engine"
+import { formatBatchRequestError, serializeUnknownError } from "@/lib/send-error"
 import { toast } from "sonner"
 
 export interface SendProgress {
@@ -263,16 +264,20 @@ export function SendingProvider({ children }: { children: ReactNode }) {
             status: "sent" | "failed"
             attempts: number
             error?: string
+            errorDetail?: string
           }[]) {
             const contact = batch.find((c) => normalizeEmail(c.email) === normalizeEmail(r.email))
             const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : r.email
+            const error = r.error ?? ""
+            const errorDetail = r.errorDetail ?? error
             await upsertSendLog({
               newsletterId,
               contactEmail: r.email,
               contactName,
               status: r.status,
               attempt: r.attempts,
-              error: r.error ?? "",
+              error,
+              errorDetail,
               sentAt: new Date(),
             })
             logMap.set(normalizeEmail(r.email), {
@@ -281,11 +286,13 @@ export function SendingProvider({ children }: { children: ReactNode }) {
               contactName,
               status: r.status,
               attempt: r.attempts,
-              error: r.error ?? "",
+              error,
+              errorDetail,
               sentAt: new Date(),
             })
           }
         } else {
+          const formatted = formatBatchRequestError(data, res.status)
           for (const contact of batch) {
             await upsertSendLog({
               newsletterId,
@@ -293,7 +300,8 @@ export function SendingProvider({ children }: { children: ReactNode }) {
               contactName: `${contact.firstName} ${contact.lastName}`.trim(),
               status: "failed",
               attempt: 1,
-              error: data.message ?? data.error ?? "Batch request failed",
+              error: formatted.error,
+              errorDetail: formatted.errorDetail,
               sentAt: new Date(),
             })
             logMap.set(normalizeEmail(contact.email), {
@@ -302,7 +310,8 @@ export function SendingProvider({ children }: { children: ReactNode }) {
               contactName: `${contact.firstName} ${contact.lastName}`.trim(),
               status: "failed",
               attempt: 1,
-              error: data.message ?? data.error ?? "Batch request failed",
+              error: formatted.error,
+              errorDetail: formatted.errorDetail,
               sentAt: new Date(),
             })
           }
@@ -310,6 +319,8 @@ export function SendingProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         if (abortRef.current) break
 
+        const error = err instanceof Error ? err.message : String(err)
+        const errorDetail = serializeUnknownError(err)
         for (const contact of batch) {
           await upsertSendLog({
             newsletterId,
@@ -317,7 +328,8 @@ export function SendingProvider({ children }: { children: ReactNode }) {
             contactName: `${contact.firstName} ${contact.lastName}`.trim(),
             status: "failed",
             attempt: 1,
-            error: String(err),
+            error,
+            errorDetail,
             sentAt: new Date(),
           })
           logMap.set(normalizeEmail(contact.email), {
@@ -326,7 +338,8 @@ export function SendingProvider({ children }: { children: ReactNode }) {
             contactName: `${contact.firstName} ${contact.lastName}`.trim(),
             status: "failed",
             attempt: 1,
-            error: String(err),
+            error,
+            errorDetail,
             sentAt: new Date(),
           })
         }

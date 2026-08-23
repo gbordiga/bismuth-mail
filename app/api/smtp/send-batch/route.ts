@@ -12,6 +12,7 @@ import {
   smtpValidationError,
   trimErrorMessage,
 } from "@/lib/api/smtp-response"
+import { serializeUnknownError } from "@/lib/send-error"
 
 export const maxDuration = 300
 
@@ -33,7 +34,13 @@ function sleep(ms: number): Promise<void> {
 
 type ContactData = MergeContact
 
-type SendResult = { email: string; status: "sent" | "failed"; attempts: number; error?: string }
+type SendResult = {
+  email: string
+  status: "sent" | "failed"
+  attempts: number
+  error?: string
+  errorDetail?: string
+}
 
 async function sendWithRetry(
   transporter: nodemailer.Transporter,
@@ -50,12 +57,14 @@ async function sendWithRetry(
   maxRetries: number,
 ): Promise<SendResult> {
   let lastError = ""
+  let lastErrorDetail = ""
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       await transporter.sendMail(mail)
       return { email: mail.to, status: "sent", attempts: attempt + 1 }
     } catch (err: unknown) {
       lastError = trimErrorMessage(err, "Unknown error")
+      lastErrorDetail = serializeUnknownError(err)
       if (attempt < maxRetries && isTransientError(err)) {
         await sleep(Math.pow(2, attempt) * 1000)
       } else {
@@ -63,7 +72,13 @@ async function sendWithRetry(
       }
     }
   }
-  return { email: mail.to, status: "failed", attempts: maxRetries + 1, error: lastError }
+  return {
+    email: mail.to,
+    status: "failed",
+    attempts: maxRetries + 1,
+    error: lastError,
+    errorDetail: lastErrorDetail,
+  }
 }
 
 async function processBatchWithWorkerPool(args: {

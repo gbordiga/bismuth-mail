@@ -1,18 +1,18 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { useDbQuery } from "@/hooks/use-db-table"
 import { db, type Newsletter, type Sender, type EmailList, type Contact } from "@/lib/db"
+import { useCampaignLeaveGuard } from "@/components/campaign-leave-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,14 +24,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
-  Plus,
-  Pencil,
-  Trash2,
-  FileEdit,
   Eye,
-  Copy,
-  Search,
-  ArrowLeft,
   Type,
   ImageIcon,
   SeparatorHorizontal,
@@ -43,6 +36,9 @@ import {
   Braces,
   Upload,
   Paperclip,
+  Plus,
+  Send,
+  Trash2,
   X,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -69,7 +65,6 @@ import {
   splitCampaignBlocks,
 } from "@/lib/attachments"
 import { buildCampaignPreviewHtml, buildCampaignPreviewSubject } from "@/lib/preview"
-import { campaignStatusLabel } from "@/lib/send-engine"
 import {
   countUniqueActiveRecipients,
   getUniqueActiveContacts,
@@ -78,9 +73,8 @@ import {
 import {
   campaignDraftSnapshot,
   campaignLeaveAction,
+  campaignPhasePath,
   canPersistCampaignDraft,
-  copyName,
-  filterCampaigns,
   isCampaignDraftDirty,
   type CampaignDraftFields,
 } from "@/lib/operator"
@@ -817,13 +811,11 @@ function CampaignAttachments({
   )
 }
 
-export function NewsletterSection() {
+export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
+  const router = useRouter()
+  const [ready, setReady] = useState(false)
   const [editing, setEditing] = useState<Newsletter | null>(null)
-  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
-  const [campaignQuery, setCampaignQuery] = useState("")
-
   const [name, setName] = useState("")
   const [subject, setSubject] = useState("")
   const [senderId, setSenderId] = useState<number | null>(null)
@@ -841,11 +833,11 @@ export function NewsletterSection() {
   const baselineRef = useRef("")
   const editingIdRef = useRef<number | null>(null)
   const persistLockRef = useRef(Promise.resolve())
-  const persistDraftRef = useRef<(options?: { silent?: boolean; close?: boolean }) => Promise<boolean>>(
-    async () => false,
-  )
+  const leaveResolveRef = useRef<((value: boolean) => void) | null>(null)
+  const persistDraftRef = useRef<(options?: { silent?: boolean }) => Promise<boolean>>(async () => false)
+  const hydratedKeyRef = useRef<string | null>(null)
   const draftRef = useRef({
-    dialogOpen: false,
+    active: false,
     persistInFlight: false,
     editingId: null as number | null,
     baseline: "",
@@ -856,28 +848,82 @@ export function NewsletterSection() {
     htmlContent: "[]",
   })
 
-  const loadCampaigns = useCallback(async () => {
-    const [allNl, allSenders, allLists] = await Promise.all([
-      db.newsletters.orderBy("createdAt").reverse().toArray(),
+  const loadComposeData = useCallback(async () => {
+    const [senders, lists, newsletter] = await Promise.all([
       db.senders.toArray(),
       db.emailLists.toArray(),
+      campaignId != null ? db.newsletters.get(campaignId) : Promise.resolve(undefined),
     ])
-    return { newsletters: allNl, senders: allSenders, lists: allLists }
-  }, [])
+    return { senders, lists, newsletter: newsletter ?? null }
+  }, [campaignId])
 
-  const { data, reload, error } = useDbQuery(loadCampaigns, {
-    newsletters: [] as Newsletter[],
+  const { data, error, loading } = useDbQuery(loadComposeData, {
     senders: [] as Sender[],
     lists: [] as EmailList[],
+    newsletter: null as Newsletter | null,
   })
-  const newsletters = data.newsletters
   const senders = data.senders
   const lists = data.lists
-  const visibleNewsletters = filterCampaigns(newsletters, campaignQuery)
+  const newsletter = data.newsletter
+  const readOnly = editing != null && editing.status !== "draft"
 
   useEffect(() => {
-    if (error) toast.error(`Could not load campaigns: ${error}`)
+    if (error) toast.error(`Could not load campaign: ${error}`)
   }, [error])
+
+  useEffect(() => {
+    if (loading) return
+    if (campaignId != null && !newsletter) {
+      toast.error("Campaign not found")
+      router.replace("/campaigns")
+      return
+    }
+
+    if (newsletter) {
+      let nextBlocks: EditorBlock[]
+      try {
+        nextBlocks = normalizeBlocks(JSON.parse(newsletter.htmlContent))
+      } catch {
+        nextBlocks = [{ id: generateId(), type: "html", content: newsletter.htmlContent, props: {} }]
+      }
+      setEditing(newsletter)
+      setName(newsletter.name)
+      setSubject(newsletter.subject)
+      setSenderId(newsletter.senderId)
+      setSelectedListIds(newsletter.listIds)
+      setBlocks(nextBlocks)
+      rememberOpenedDraft(
+        {
+          name: newsletter.name,
+          subject: newsletter.subject,
+          senderId: newsletter.senderId,
+          listIds: newsletter.listIds,
+          htmlContent: JSON.stringify(nextBlocks),
+        },
+        newsletter,
+      )
+    } else {
+      const initialBlocks = [createBlock("text")]
+      const nextSenderId = senders[0]?.id ?? null
+      setEditing(null)
+      setName("")
+      setSubject("")
+      setSenderId(nextSenderId)
+      setSelectedListIds([])
+      setBlocks(initialBlocks)
+      rememberOpenedDraft(
+        {
+          name: "",
+          subject: "",
+          senderId: nextSenderId,
+          listIds: [],
+          htmlContent: JSON.stringify(initialBlocks),
+        },
+        null,
+      )
+    }
+    setReady(true)
+  }, [loading, campaignId, newsletter, router, senders])
 
   useEffect(() => {
     let cancelled = false
@@ -933,78 +979,23 @@ export function NewsletterSection() {
     }
   }
 
-  function rememberOpenedDraft(draft: CampaignDraftFields, newsletter: Newsletter | null) {
+  function rememberOpenedDraft(draft: CampaignDraftFields, nextNewsletter: Newsletter | null) {
     const snapshot = campaignDraftSnapshot(draft)
     baselineRef.current = snapshot
-    editingIdRef.current = newsletter?.id ?? null
+    editingIdRef.current = nextNewsletter?.id ?? null
     setSaveStatus("clean")
     setLeaveConfirmOpen(false)
-  }
-
-  function closeEditor() {
-    setDialogOpen(false)
-    setLeaveConfirmOpen(false)
-    setSaveStatus("clean")
-    void reload()
   }
 
   draftRef.current = {
-    dialogOpen,
+    active: ready && !readOnly,
     persistInFlight: draftRef.current.persistInFlight,
     editingId: editingIdRef.current,
     baseline: baselineRef.current,
     ...currentDraft(),
   }
 
-  function openCreate() {
-    const initialBlocks = [createBlock("text")]
-    const nextSenderId = senders[0]?.id ?? null
-    setEditing(null)
-    setName("")
-    setSubject("")
-    setSenderId(nextSenderId)
-    setSelectedListIds([])
-    setBlocks(initialBlocks)
-    rememberOpenedDraft(
-      {
-        name: "",
-        subject: "",
-        senderId: nextSenderId,
-        listIds: [],
-        htmlContent: JSON.stringify(initialBlocks),
-      },
-      null,
-    )
-    setDialogOpen(true)
-  }
-
-  function openEdit(nl: Newsletter) {
-    let nextBlocks: EditorBlock[]
-    try {
-      nextBlocks = normalizeBlocks(JSON.parse(nl.htmlContent))
-    } catch {
-      nextBlocks = [{ id: generateId(), type: "html", content: nl.htmlContent, props: {} }]
-    }
-    setEditing(nl)
-    setName(nl.name)
-    setSubject(nl.subject)
-    setSenderId(nl.senderId)
-    setSelectedListIds(nl.listIds)
-    setBlocks(nextBlocks)
-    rememberOpenedDraft(
-      {
-        name: nl.name,
-        subject: nl.subject,
-        senderId: nl.senderId,
-        listIds: nl.listIds,
-        htmlContent: JSON.stringify(nextBlocks),
-      },
-      nl,
-    )
-    setDialogOpen(true)
-  }
-
-  async function persistDraft(options?: { silent?: boolean; close?: boolean }): Promise<boolean> {
+  async function persistDraft(options?: { silent?: boolean }): Promise<boolean> {
     const previous = persistLockRef.current
     let release = () => {}
     persistLockRef.current = new Promise<void>((resolve) => {
@@ -1025,7 +1016,6 @@ export function NewsletterSection() {
         return false
       }
       if (!isCampaignDraftDirty(draft, baselineRef.current)) {
-        if (options?.close) closeEditor()
         return true
       }
 
@@ -1049,12 +1039,12 @@ export function NewsletterSection() {
           sentAt: null,
           createdAt: new Date(),
         })
+        router.replace(campaignPhasePath(id, "compose"))
       }
       baselineRef.current = campaignDraftSnapshot(draft)
       draftRef.current = { ...draftRef.current, editingId: id, baseline: baselineRef.current }
       setSaveStatus("saved")
       if (!options?.silent) toast.success(wasNew ? "Campaign created" : "Campaign updated")
-      if (options?.close) closeEditor()
       return true
     } catch {
       setSaveStatus("dirty")
@@ -1068,30 +1058,31 @@ export function NewsletterSection() {
 
   persistDraftRef.current = persistDraft
 
-  async function handleSave() {
-    await persistDraft({ close: true })
-  }
-
-  async function handleBack() {
+  useCampaignLeaveGuard(async () => {
+    if (!ready || readOnly) return true
     const draft = currentDraft()
     const action = campaignLeaveAction(
       isCampaignDraftDirty(draft, baselineRef.current),
       canPersistCampaignDraft(draft),
     )
     if (action === "confirm") {
-      setLeaveConfirmOpen(true)
-      return
+      return new Promise<boolean>((resolve) => {
+        leaveResolveRef.current = resolve
+        setLeaveConfirmOpen(true)
+      })
     }
-    if (action === "save") {
-      await persistDraft({ silent: true, close: true })
-      return
-    }
-    closeEditor()
-  }
+    return true
+  })
 
   useEffect(() => {
-    if (!dialogOpen) return
-    const draft = currentDraft()
+    if (!ready || readOnly) return
+    const draft: CampaignDraftFields = {
+      name,
+      subject,
+      senderId,
+      listIds: selectedListIds,
+      htmlContent: JSON.stringify(blocks),
+    }
     if (!isCampaignDraftDirty(draft, baselineRef.current)) return
     setSaveStatus("dirty")
     if (!canPersistCampaignDraft(draft)) return
@@ -1099,12 +1090,12 @@ export function NewsletterSection() {
       void persistDraftRef.current({ silent: true })
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [dialogOpen, name, subject, senderId, selectedListIds, blocks])
+  }, [ready, readOnly, name, subject, senderId, selectedListIds, blocks])
 
   useEffect(() => {
     return () => {
       const draft = draftRef.current
-      if (!draft.dialogOpen || draft.persistInFlight) return
+      if (!draft.active || draft.persistInFlight) return
       if (!canPersistCampaignDraft(draft) || !isCampaignDraftDirty(draft, draft.baseline)) return
       void saveCampaignDraft({
         id: draft.editingId ?? undefined,
@@ -1118,7 +1109,7 @@ export function NewsletterSection() {
   }, [])
 
   useEffect(() => {
-    if (!dialogOpen) return
+    if (!ready || readOnly) return
     function onBeforeUnload(event: BeforeUnloadEvent) {
       const draft = draftRef.current
       if (!isCampaignDraftDirty(draft, draft.baseline)) return
@@ -1127,33 +1118,19 @@ export function NewsletterSection() {
     }
     window.addEventListener("beforeunload", onBeforeUnload)
     return () => window.removeEventListener("beforeunload", onBeforeUnload)
-  }, [dialogOpen, name, subject, senderId, selectedListIds, blocks])
+  }, [ready, readOnly, name, subject, senderId, selectedListIds, blocks])
 
-  async function handleDelete(id: number) {
-    setPendingDeleteId(id)
+  async function handleReviewAndSend() {
+    const ok = await persistDraft()
+    if (ok && editingIdRef.current != null) {
+      router.push(campaignPhasePath(editingIdRef.current, "send"))
+    }
   }
 
-  async function confirmDelete() {
-    if (!pendingDeleteId) return
-    const id = pendingDeleteId
-    setPendingDeleteId(null)
-    await db.sendLogs.where("newsletterId").equals(id).delete()
-    await db.newsletters.delete(id)
-    toast.success("Campaign deleted")
-    void reload()
-  }
-
-  async function handleDuplicate(nl: Newsletter) {
-    await db.newsletters.add({
-      ...nl,
-      id: undefined,
-      name: copyName(nl.name),
-      status: "draft",
-      sentAt: null,
-      createdAt: new Date(),
-    })
-    toast.success("Campaign duplicated")
-    void reload()
+  function resolveLeave(shouldLeave: boolean) {
+    leaveResolveRef.current?.(shouldLeave)
+    leaveResolveRef.current = null
+    setLeaveConfirmOpen(false)
   }
 
   async function showPreview() {
@@ -1191,21 +1168,6 @@ export function NewsletterSection() {
 
   function toggleListSelection(listId: number) {
     setSelectedListIds((prev) => (prev.includes(listId) ? prev.filter((id) => id !== listId) : [...prev, listId]))
-  }
-
-  function getStatusBadge(status: Newsletter["status"]) {
-    switch (status) {
-      case "draft":
-        return <Badge variant="secondary">{campaignStatusLabel(status)}</Badge>
-      case "sending":
-        return <Badge className="bg-warning text-warning-foreground">{campaignStatusLabel(status)}</Badge>
-      case "sent":
-        return <Badge className="bg-success text-success-foreground">{campaignStatusLabel(status)}</Badge>
-      case "sent_with_errors":
-        return <Badge className="bg-warning text-warning-foreground">{campaignStatusLabel(status)}</Badge>
-      default:
-        return <Badge variant="outline">{campaignStatusLabel(status)}</Badge>
-    }
   }
 
   const { content: contentBlocks, attachments: attachmentBlocks } = splitCampaignBlocks(blocks)
@@ -1264,178 +1226,6 @@ export function NewsletterSection() {
     </Dialog>
   )
 
-  if (!dialogOpen) {
-    return (
-      <div className="content-area">
-        <div className="section-header">
-          <div>
-            <h2 className="section-title">Campaigns</h2>
-            <p className="section-description">Create and manage your email campaigns</p>
-          </div>
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 size-4" />
-            New Campaign
-          </Button>
-        </div>
-
-        {newsletters.length === 0 ? (
-          <Card className="compact-card">
-            <CardContent className="empty-state">
-              <div className="empty-state-icon">
-                <FileEdit className="size-7" />
-              </div>
-              <CardTitle className="empty-state-title">No campaigns yet</CardTitle>
-              <CardDescription className="empty-state-description">
-                Create your first campaign to start sending emails
-              </CardDescription>
-              <Button onClick={openCreate}>
-                <Plus className="mr-2 size-4" />
-                New Campaign
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="compact-card">
-            <CardContent className="p-0">
-              {newsletters.length > 1 && (
-                <div className="border-b px-3 py-2.5">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                    <Input
-                      value={campaignQuery}
-                      onChange={(e) => setCampaignQuery(e.target.value)}
-                      placeholder="Search campaigns by name or subject"
-                      className="pl-8"
-                      aria-label="Search campaigns"
-                    />
-                  </div>
-                </div>
-              )}
-              {visibleNewsletters.length === 0 ? (
-                <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                  No campaigns match that search.
-                </p>
-              ) : (
-                <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Lists</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {visibleNewsletters.map((nl) => (
-                    <TableRow
-                      key={nl.id}
-                      className={nl.status === "draft" ? "cursor-pointer" : undefined}
-                      onClick={() => {
-                        if (nl.status === "draft") openEdit(nl)
-                      }}
-                    >
-                      <TableCell className="font-medium">{nl.name}</TableCell>
-                      <TableCell className="max-w-[200px] truncate text-sm">{nl.subject}</TableCell>
-                      <TableCell>{getStatusBadge(nl.status)}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {nl.listIds.map((lid) => {
-                            const list = lists.find((l) => l.id === lid)
-                            return list ? (
-                              <Badge key={lid} variant="outline" className="text-xs">
-                                {list.name}
-                              </Badge>
-                            ) : null
-                          })}
-                          {nl.listIds.length === 0 && <span className="text-xs text-muted-foreground">None</span>}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {nl.createdAt ? new Date(nl.createdAt).toLocaleDateString() : "-"}
-                      </TableCell>
-                      <TableCell className="text-right" onClick={(event) => event.stopPropagation()}>
-                        <TooltipProvider>
-                          <div className="flex items-center justify-end gap-1">
-                            {nl.status === "draft" && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    aria-label="Edit campaign"
-                                    onClick={() => openEdit(nl)}
-                                  >
-                                    <Pencil className="size-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Edit campaign</TooltipContent>
-                              </Tooltip>
-                            )}
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="Duplicate campaign"
-                                  onClick={() => handleDuplicate(nl)}
-                                >
-                                  <Copy className="size-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Duplicate campaign</TooltipContent>
-                            </Tooltip>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="Delete campaign"
-                                  onClick={() => handleDelete(nl.id!)}
-                                >
-                                  <Trash2 className="size-4 text-destructive" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Delete campaign</TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TooltipProvider>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {previewDialog}
-
-        <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This action deletes the campaign and all related send logs. It cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={confirmDelete}
-              >
-                Delete campaign
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    )
-  }
-
   const saveStatusLabel =
     saveStatus === "saving"
       ? "Saving…"
@@ -1445,40 +1235,52 @@ export function NewsletterSection() {
           ? "Unsaved changes"
           : null
 
+  if (!ready) {
+    return <p className="text-sm text-muted-foreground">Loading campaign…</p>
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+      {readOnly && (
+        <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          {editing?.status === "sending"
+            ? "Sending is in progress. Compose is read-only."
+            : "This campaign was already sent. Reset to draft from Send to edit."}
+        </p>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={() => void handleBack()} aria-label="Back to campaigns">
-                  <ArrowLeft className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Back to campaigns</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
           <Input
             id="nl-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Untitled campaign"
             aria-label="Campaign name"
+            disabled={readOnly}
             className="h-9 border-0 bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
           />
         </div>
         <div className="action-cluster">
-          {saveStatusLabel && <span className="text-sm text-muted-foreground">{saveStatusLabel}</span>}
-          <Button variant="outline" onClick={showPreview}>
+          {saveStatusLabel && !readOnly && <span className="text-sm text-muted-foreground">{saveStatusLabel}</span>}
+          <Button variant="outline" onClick={() => void showPreview()}>
             <Eye className="mr-2 size-4" />
             Preview
           </Button>
-          <Button onClick={handleSave}>Save</Button>
+          {!readOnly && (
+            <>
+              <Button variant="outline" onClick={() => void persistDraft()}>
+                Save
+              </Button>
+              <Button onClick={() => void handleReviewAndSend()}>
+                <Send className="mr-2 size-4" />
+                Review & Send
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-card">
+      <div className={cn("overflow-hidden rounded-xl border bg-card", readOnly && "pointer-events-none opacity-80")}>
         <ComposeRow label="From">
           <Select value={senderId ? String(senderId) : ""} onValueChange={(v) => setSenderId(parseInt(v))}>
             <SelectTrigger className="h-8 w-full border-0 px-0 shadow-none focus-visible:ring-0">
@@ -1531,7 +1333,12 @@ export function NewsletterSection() {
 
       {previewDialog}
 
-      <AlertDialog open={leaveConfirmOpen} onOpenChange={setLeaveConfirmOpen}>
+      <AlertDialog
+        open={leaveConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open) resolveLeave(false)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Leave without saving?</AlertDialogTitle>
@@ -1540,10 +1347,10 @@ export function NewsletterSection() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => resolveLeave(false)}>Keep editing</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={closeEditor}
+              onClick={() => resolveLeave(true)}
             >
               Discard changes
             </AlertDialogAction>
@@ -1553,3 +1360,5 @@ export function NewsletterSection() {
     </div>
   )
 }
+
+export { CampaignCompose as NewsletterSection }

@@ -1,6 +1,5 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -12,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import type { ChangelogVersion, ChangelogData } from "@/lib/changelog-parser"
+import type { ChangelogVersion } from "@/lib/changelog-parser"
 import { History, Package, Calendar, Plus, Edit3, Bug, Trash2, AlertTriangle, Shield, Loader2 } from "lucide-react"
 
 const changeTypeConfig = {
@@ -51,32 +50,18 @@ const changeTypeConfig = {
 interface ChangelogModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  versions: ChangelogVersion[]
+  error: string | null
+  hasFetched: boolean
 }
 
-export function ChangelogModal({ open, onOpenChange }: ChangelogModalProps) {
-  const [versions, setVersions] = useState<ChangelogVersion[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [hasFetched, setHasFetched] = useState(false)
-
-  useEffect(() => {
-    if (!open || hasFetched) return
-
-    fetch("/api/changelog", { cache: "no-store" })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load changelog")
-        return res.json() as Promise<ChangelogData>
-      })
-      .then((data) => {
-        setVersions(data.versions)
-        setHasFetched(true)
-      })
-      .catch((err) => {
-        console.error("Error loading changelog:", err)
-        setError("Failed to load changelog")
-        setHasFetched(true)
-      })
-  }, [open, hasFetched])
-
+export function ChangelogModal({
+  open,
+  onOpenChange,
+  versions = [],
+  error,
+  hasFetched,
+}: ChangelogModalProps) {
   const loading = open && !hasFetched
 
   return (

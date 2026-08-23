@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
+import { APP_VERSION } from "@/lib/app-version"
 import { DB_SCHEMA_VERSION, db } from "@/lib/db"
 import { normalizeBackup, prepareRestorePayload, type BackupData } from "@/lib/backup"
 import { Button } from "@/components/ui/button"
@@ -41,7 +42,7 @@ export function BackupSection() {
       const backup: BackupData = {
         version: 2,
         exportedAt: new Date().toISOString(),
-        appVersion: process.env.NEXT_PUBLIC_APP_VERSION ?? "dev",
+        appVersion: APP_VERSION,
         dbSchemaVersion: DB_SCHEMA_VERSION,
         payload: {
           smtpConfigs,

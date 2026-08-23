@@ -17,7 +17,7 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 - **Email Lists** — Organize contacts into lists with custom fields, CSV import/export (including unsubscribe flags), duplicate, search, unsubscribe toggles, and a local suppression list
 - **Block Editor** — Compose emails using text, image (URL or upload), button, divider, and raw HTML blocks, plus campaign file attachments, with dark-mode editing and campaign search
 - **Merge Fields** — Use `{{field}}` placeholders in subject and body, resolved per-contact from list custom fields
-- **Campaign Sending** — Send campaigns with live progress, resume, retry-failed, campaign search, send-log search, filtered log export, pre-send checks, and test emails
+- **Campaigns** — Compose, review, send, and inspect logs in one campaign workspace, with live progress, resume, retry-failed, search, filtered log export, pre-send checks, and test emails
 - **Deliverability basics** — `List-Unsubscribe` mailto header, multipart text/plain, sanitized HTML blocks
 - **Backup & Restore** — Export and import all data as JSON, with prepared restore counts, snapshot rollback, and automatic reload after a successful restore
 - **Dark Mode** — System-aware theme toggle with light and dark modes
@@ -91,8 +91,9 @@ bismuth-mail/
 │   │   ├── smtp/page.tsx
 │   │   ├── senders/page.tsx
 │   │   ├── lists/page.tsx
-│   │   ├── editor/page.tsx
-│   │   ├── send/page.tsx
+│   │   ├── campaigns/           # List plus compose / send / logs workspace
+│   │   ├── editor/page.tsx      # Redirects to /campaigns
+│   │   ├── send/page.tsx        # Redirects to the active campaign or /campaigns
 │   │   └── backup/page.tsx
 │   ├── layout.tsx             # Root layout with theme provider
 │   ├── page.tsx               # Redirects to /smtp
@@ -102,8 +103,11 @@ bismuth-mail/
 │   ├── smtp-config.tsx    # SMTP server management
 │   ├── sender-section.tsx # Sender profile management
 │   ├── email-list-section.tsx # Contact list management
-│   ├── newsletter-editor.tsx  # Block-based email editor
-│   ├── send-campaign.tsx  # Campaign sending interface
+│   ├── campaign-list.tsx      # Campaign hub
+│   ├── campaign-workspace.tsx # Compose / Send / Logs chrome
+│   ├── newsletter-editor.tsx  # Campaign compose phase
+│   ├── send-campaign.tsx      # Campaign send phase
+│   ├── campaign-send-logs.tsx # Campaign logs phase
 │   ├── backup-section.tsx # Data backup and restore
 │   └── ui/                # Reusable UI primitives (shadcn/ui)
 └── lib/
@@ -119,8 +123,7 @@ bismuth-mail/
 1. **Configure** an SMTP server (host, port, credentials) and test the connection
 2. **Create** a sender profile linked to an SMTP configuration
 3. **Build** email lists and add contacts manually or via CSV import
-4. **Compose** an email campaign using the block editor with live preview
-5. **Send** the campaign to one or more lists, with real-time delivery tracking
+4. **Compose and send** a campaign in one workspace: write the email, review the checklist, send, then inspect logs
 
 All data stays in your browser's IndexedDB. Use the Backup section to export/import your data as JSON.
 

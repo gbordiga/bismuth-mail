@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
+import { APP_VERSION } from "@/lib/app-version"
 import { parseChangelog } from "@/lib/changelog-parser"
 
 describe("parseChangelog", () => {
@@ -11,6 +12,7 @@ describe("parseChangelog", () => {
     expect(data.versions.length).toBeGreaterThan(0)
     expect(data.versions[0]?.version).toMatch(/^\d+\.\d+\.\d+$/)
     expect(data.versions[0]?.changes[0]?.items.length).toBeGreaterThan(0)
+    expect(data.versions[0]?.version).toBe(APP_VERSION)
   })
 
   it("rejects YAML whose list items start with a reserved character", () => {

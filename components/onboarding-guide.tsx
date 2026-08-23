@@ -76,8 +76,8 @@ export function OnboardingGuide() {
     { key: "smtp", done: progress.smtp, href: "/smtp", label: "Add an SMTP server" },
     { key: "sender", done: progress.sender, href: "/senders", label: "Create a sender profile" },
     { key: "list", done: progress.list, href: "/lists", label: "Add a list with contacts" },
-    { key: "campaign", done: progress.campaign, href: "/editor", label: "Compose a campaign" },
-    { key: "send", done: progress.send, href: "/send", label: "Send your first campaign" },
+    { key: "campaign", done: progress.campaign, href: "/campaigns/new", label: "Compose a campaign" },
+    { key: "send", done: progress.send, href: "/campaigns", label: "Send your first campaign" },
   ] as const
 
   const allDone = steps.every((step) => step.done)

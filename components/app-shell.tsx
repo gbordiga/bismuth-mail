@@ -1,14 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
-import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon, Loader2, LifeBuoy } from "lucide-react"
+import { Mail, Server, Users, FileEdit, Menu, X, DatabaseBackup, Sun, Moon, Loader2, LifeBuoy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useChangelog } from "@/hooks/use-changelog"
 import { useSending } from "@/lib/sending-context"
 import { ChangelogModal } from "@/components/changelog-modal"
 import { OnboardingGuide, reopenOnboarding } from "@/components/onboarding-guide"
@@ -17,8 +18,7 @@ const navItems = [
   { id: "smtp", label: "SMTP Config", href: "/smtp", icon: Server },
   { id: "senders", label: "Senders", href: "/senders", icon: Mail },
   { id: "lists", label: "Email Lists", href: "/lists", icon: Users },
-  { id: "editor", label: "Campaigns", href: "/editor", icon: FileEdit },
-  { id: "send", label: "Send Campaign", href: "/send", icon: Send },
+  { id: "campaigns", label: "Campaigns", href: "/campaigns", icon: FileEdit },
   { id: "backup", label: "Backup", href: "/backup", icon: DatabaseBackup },
 ] as const
 
@@ -31,8 +31,7 @@ type NavGroup = {
 const navGroups: NavGroup[] = [
   { label: "Setup", items: [navItems[0], navItems[1]] },
   { label: "Content", items: [navItems[2], navItems[3]] },
-  { label: "Deliver", items: [navItems[4]] },
-  { label: "System", items: [navItems[5]] },
+  { label: "System", items: [navItems[4]] },
 ]
 
 function getActiveSection(pathname: string): NavSection {
@@ -50,7 +49,12 @@ export function AppShell({ children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [changelogOpen, setChangelogOpen] = useState(false)
   const { theme, setTheme } = useTheme()
-  const { sending, phase, sendProgress } = useSending()
+  const { sending, phase, sendProgress, activeNewsletterId } = useSending()
+  const { versions, latestVersion, error: changelogError, hasFetched, reload } = useChangelog()
+
+  useEffect(() => {
+    if (changelogOpen) void reload()
+  }, [changelogOpen, reload])
 
   const progressPct = sendProgress.total > 0
     ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100
@@ -115,7 +119,7 @@ export function AppShell({ children }: AppShellProps) {
                       >
                         <Icon className="size-4 shrink-0" />
                         {item.label}
-                        {item.id === "send" && sending && (
+                        {item.id === "campaigns" && sending && (
                           <span className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-primary" />
                         )}
                       </Link>
@@ -128,7 +132,7 @@ export function AppShell({ children }: AppShellProps) {
 
           {sending && (
             <Link
-              href="/send"
+              href={activeNewsletterId != null ? `/campaigns/${activeNewsletterId}/send` : "/campaigns"}
               onClick={() => setMobileOpen(false)}
               className="mt-3 w-full rounded-lg border bg-muted/30 p-3 text-left transition-colors hover:bg-muted/50"
             >
@@ -169,7 +173,7 @@ export function AppShell({ children }: AppShellProps) {
               <p className="text-xs font-medium text-foreground/90">Local-first storage</p>
               <p className="text-[11px] text-muted-foreground">Data is stored in IndexedDB on this device</p>
               <p className="mt-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:text-primary">
-                v{process.env.NEXT_PUBLIC_APP_VERSION} · View changelog
+                v{latestVersion} · View changelog
               </p>
             </button>
             <TooltipProvider>
@@ -230,7 +234,13 @@ export function AppShell({ children }: AppShellProps) {
       </div>
 
       {/* Changelog Modal */}
-      <ChangelogModal open={changelogOpen} onOpenChange={setChangelogOpen} />
+      <ChangelogModal
+        open={changelogOpen}
+        onOpenChange={setChangelogOpen}
+        versions={versions}
+        error={changelogError}
+        hasFetched={hasFetched}
+      />
     </div>
   )
 }

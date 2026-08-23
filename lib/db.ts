@@ -71,6 +71,7 @@ export interface SendLog {
   status: "pending" | "sent" | "failed"
   attempt: number
   error?: string
+  errorDetail?: string
   sentAt: Date | null
 }
 

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest"
 import {
+  campaignDefaultPhase,
   campaignDraftSnapshot,
   campaignLeaveAction,
+  campaignPhasePath,
+  campaignWorkspacePath,
   canPersistCampaignDraft,
   copyName,
   filterCampaigns,
@@ -10,6 +13,7 @@ import {
   isCampaignDraftDirty,
   isSendReady,
   matchesQuery,
+  parseCampaignId,
 } from "@/lib/operator"
 
 describe("copyName", () => {
@@ -42,12 +46,21 @@ describe("filterCampaigns", () => {
 describe("filterSendLogs", () => {
   const logs = [
     { status: "sent", contactEmail: "ok@example.com", contactName: "Ok", error: "" },
-    { status: "failed", contactEmail: "bad@example.com", contactName: "Bad", error: "550 mailbox" },
+    {
+      status: "failed",
+      contactEmail: "bad@example.com",
+      contactName: "Bad",
+      error: "550 mailbox",
+      errorDetail: '{"code":"VALIDATION_ERROR"}',
+    },
   ]
 
   it("filters by status and searches email, name, and error", () => {
     expect(filterSendLogs(logs, "failed", "").map((item) => item.contactEmail)).toEqual(["bad@example.com"])
     expect(filterSendLogs(logs, "all", "550").map((item) => item.contactEmail)).toEqual(["bad@example.com"])
+    expect(filterSendLogs(logs, "all", "VALIDATION_ERROR").map((item) => item.contactEmail)).toEqual([
+      "bad@example.com",
+    ])
   })
 })
 
@@ -98,5 +111,22 @@ describe("campaign draft persistence", () => {
     expect(campaignLeaveAction(false, true)).toBe("close")
     expect(campaignLeaveAction(true, true)).toBe("save")
     expect(campaignLeaveAction(true, false)).toBe("confirm")
+  })
+})
+
+describe("campaign workspace routes", () => {
+  it("picks the default phase from campaign status", () => {
+    expect(campaignDefaultPhase("draft")).toBe("compose")
+    expect(campaignDefaultPhase("sending")).toBe("send")
+    expect(campaignDefaultPhase("sent")).toBe("logs")
+    expect(campaignDefaultPhase("sent_with_errors")).toBe("logs")
+  })
+
+  it("builds stable campaign URLs and rejects invalid ids", () => {
+    expect(campaignWorkspacePath(12)).toBe("/campaigns/12")
+    expect(campaignPhasePath(12, "send")).toBe("/campaigns/12/send")
+    expect(parseCampaignId("12")).toBe(12)
+    expect(parseCampaignId("0")).toBeNull()
+    expect(parseCampaignId("abc")).toBeNull()
   })
 })

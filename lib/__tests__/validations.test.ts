@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { smtpTestSchema, smtpSendSchema, smtpSendBatchSchema } from "@/lib/validations"
+import { SIGNATURE_MAX_CHARS, smtpTestSchema, smtpSendSchema, smtpSendBatchSchema } from "@/lib/validations"
 
 describe("smtpTestSchema", () => {
   const valid = { host: "smtp.example.com", port: 587, secure: false, username: "user", password: "pass" }
@@ -149,6 +149,16 @@ describe("smtpSendBatchSchema", () => {
 
   it("rejects maxRetries above 5", () => {
     expect(smtpSendBatchSchema.safeParse({ ...valid, maxRetries: 10 }).success).toBe(false)
+  })
+
+  it("accepts HTML signatures larger than 10,000 characters", () => {
+    expect(smtpSendBatchSchema.safeParse({ ...valid, signature: "x".repeat(12_000) }).success).toBe(true)
+  })
+
+  it("rejects signatures above the HTML size cap", () => {
+    expect(
+      smtpSendBatchSchema.safeParse({ ...valid, signature: "x".repeat(SIGNATURE_MAX_CHARS + 1) }).success,
+    ).toBe(false)
   })
 
   it("accepts attachment blocks with large base64 content", () => {

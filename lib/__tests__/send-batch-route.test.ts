@@ -88,6 +88,8 @@ describe("POST /api/smtp/send-batch", () => {
     expect(data.success).toBe(false)
     expect(data.code).toBe("VALIDATION_ERROR")
     expect(typeof data.message).toBe("string")
+    expect(Array.isArray(data.details)).toBe(true)
+    expect(data.details.length).toBeGreaterThan(0)
     expect(createTransportMock).not.toHaveBeenCalled()
   })
 
@@ -182,6 +184,28 @@ describe("POST /api/smtp/send-batch", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("returns a full errorDetail on permanent SMTP failure", async () => {
+    const smtpError = Object.assign(new Error("550 mailbox unavailable"), {
+      code: "EENVELOPE",
+      response: "550 mailbox unavailable",
+      responseCode: 550,
+    })
+    sendMailMock.mockRejectedValue(smtpError)
+
+    const res = await POST(buildRequest(buildValidBody()))
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.results).toHaveLength(1)
+    expect(data.results[0].status).toBe("failed")
+    expect(data.results[0].error).toContain("550 mailbox unavailable")
+    expect(JSON.parse(data.results[0].errorDetail)).toMatchObject({
+      message: "550 mailbox unavailable",
+      code: "EENVELOPE",
+      responseCode: 550,
+    })
   })
 })
 

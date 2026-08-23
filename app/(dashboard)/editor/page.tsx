@@ -1,5 +1,5 @@
-import { NewsletterSection } from "@/components/newsletter-editor"
+import { redirect } from "next/navigation"
 
-export default function EditorPage() {
-  return <NewsletterSection />
+export default function EditorRedirectPage() {
+  redirect("/campaigns")
 }
