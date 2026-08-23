@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { blockToHtml, buildFullHtml, sanitizeEditorHtml, type EditorBlock } from "@/lib/email-builder"
+import { blockToHtml, buildFullHtml, isEmptyEditorHtml, sanitizeEditorHtml, type EditorBlock } from "@/lib/email-builder"
 
 const TINY_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
@@ -32,6 +32,11 @@ describe("blockToHtml", () => {
     expect(html).toContain("data:image/png;base64")
     expect(html).toContain('alt="dot"')
     expect(html).toContain("width:100%")
+  })
+
+  it("keeps image-only and empty-table text blocks", () => {
+    expect(blockToHtml(block({ type: "text", content: `<img src="${TINY_PNG}" alt="" />` }))).toContain("<img")
+    expect(blockToHtml(block({ type: "text", content: "<table><tr><td></td></tr></table>" }))).toContain("<table")
   })
 
   it("renders an image block with src and alt", () => {
@@ -186,6 +191,26 @@ describe("buildFullHtml", () => {
     const html = buildFullHtml(withEmpty, "", "mailto:unsub@test.com", false)
     expect(html).toContain("Visible")
     expect(html).not.toContain("<img ")
+  })
+})
+
+describe("isEmptyEditorHtml", () => {
+  it("treats blank markup and the legacy seed as empty", () => {
+    expect(isEmptyEditorHtml("")).toBe(true)
+    expect(isEmptyEditorHtml("<p><br></p>")).toBe(true)
+    expect(isEmptyEditorHtml("<p>&nbsp;</p>")).toBe(true)
+    expect(isEmptyEditorHtml("<p>Write your text here...</p>")).toBe(true)
+  })
+
+  it("keeps image-only and table-only markup", () => {
+    expect(isEmptyEditorHtml(`<img src="${TINY_PNG}" alt="" />`)).toBe(false)
+    expect(isEmptyEditorHtml("<p><img src='https://example.com/a.png'></p>")).toBe(false)
+    expect(isEmptyEditorHtml("<table><tr><td></td></tr></table>")).toBe(false)
+    expect(isEmptyEditorHtml("<TABLE><TR><TD></TD></TR></TABLE>")).toBe(false)
+  })
+
+  it("keeps ordinary visible text", () => {
+    expect(isEmptyEditorHtml("<p>Hello</p>")).toBe(false)
   })
 })
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, type ReactNode } from "react"
 import DOMPurify from "isomorphic-dompurify"
-import { sanitizeEditorHtml as purifyEditorHtml } from "@/lib/email-builder"
+import { isEmptyEditorHtml, sanitizeEditorHtml as purifyEditorHtml } from "@/lib/email-builder"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -153,23 +153,6 @@ function setEditorHtml(target: HTMLDivElement, html: string) {
   const parser = new DOMParser()
   const doc = parser.parseFromString(html, "text/html")
   target.replaceChildren(...Array.from(doc.body.childNodes))
-}
-
-const LEGACY_TEXT_SEED = "Write your text here..."
-
-function editorPlainText(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\u00a0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
-function isEmptyEditorHtml(html: string): boolean {
-  const text = editorPlainText(html)
-  return text.length === 0 || text === LEGACY_TEXT_SEED
 }
 
 export function RichTextEditor({

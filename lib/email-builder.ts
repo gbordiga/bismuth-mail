@@ -100,6 +100,24 @@ export function sanitizeEditorHtml(html: string): string {
   })
 }
 
+export const LEGACY_TEXT_SEED = "Write your text here..."
+
+function editorPlainText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+export function isEmptyEditorHtml(html: string): boolean {
+  const text = editorPlainText(html)
+  if (text === LEGACY_TEXT_SEED) return true
+  return text.length === 0 && !/<img|<table/i.test(html)
+}
+
 export interface EditorBlock {
   id: string
   type: BlockType
@@ -110,9 +128,7 @@ export interface EditorBlock {
 export function blockToHtml(block: EditorBlock, preview = false): string {
   switch (block.type) {
     case "text": {
-      const text = block.content.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim()
-      if (text === "Write your text here...") return ""
-      if (!text && !/<img|<table/i.test(block.content)) return ""
+      if (isEmptyEditorHtml(block.content)) return ""
       return `<div style="padding: 8px 0;">${sanitizeEditorHtml(block.content)}</div>`
     }
     case "image": {
