@@ -6,18 +6,19 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61dafb?logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178c6?logo=typescript)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06b6d4?logo=tailwindcss)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## Features
 
-- **SMTP Configuration** — Add and manage multiple SMTP servers with connection testing, tunable batch size, delay, and max connections
+- **SMTP Configuration** — Add and manage multiple SMTP servers with connection testing, tunable delay, and max connections
 - **Sender Profiles** — Create sender identities with custom signatures and reply-to addresses
-- **Email Lists** — Organize contacts into lists with custom fields, CSV import/export
+- **Email Lists** — Organize contacts into lists with custom fields, CSV import/export, unsubscribe toggles, and a local suppression list
 - **Block Editor** — Compose emails using text, image, button, divider, and raw HTML blocks
 - **Merge Fields** — Use `{{field}}` placeholders in subject and body, resolved per-contact from list custom fields
-- **Campaign Sending** — Send campaigns to selected lists with real-time progress tracking, automatic retries, and test emails
+- **Campaign Sending** — Send campaigns with live progress, resume, retry-failed, send logs, and test emails
+- **Deliverability basics** — `List-Unsubscribe` header, multipart text/plain, sanitized HTML blocks
 - **Backup & Restore** — Export and import all data as JSON for portability
 - **Dark Mode** — System-aware theme toggle with light and dark modes
 - **Fully Local Storage** — All data persisted in IndexedDB via Dexie; no server-side database needed
@@ -32,7 +33,7 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 | Database   | [Dexie](https://dexie.org/) (IndexedDB)                                                                           |
 | Email      | [Nodemailer](https://nodemailer.com/) via API routes                                                              |
 | Validation | [Zod](https://zod.dev/)                                                                                           |
-| Language   | TypeScript 5.9                                                                                                    |
+| Language   | TypeScript 6                                                                                                      |
 
 ## Getting Started
 
@@ -106,8 +107,9 @@ bismuth-mail/
 │   ├── backup-section.tsx # Data backup and restore
 │   └── ui/                # Reusable UI primitives (shadcn/ui)
 └── lib/
-    ├── db.ts              # Dexie database schema and types
+    ├── db.ts              # Dexie database schema and types (IndexedDB only)
     ├── email-builder.ts   # HTML email template builder
+    ├── send-engine.ts     # Recipient selection and campaign status helpers
     ├── validations.ts     # Zod schemas for API validation
     └── utils.ts           # Utility functions
 ```

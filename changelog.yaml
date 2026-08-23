@@ -1,4 +1,26 @@
 versions:
+  - version: 0.3.0
+    date: 2026-08-23
+    changes:
+      - type: added
+        items:
+          - Contact unsubscribe toggle and a browser-local global suppression list that is skipped on every send
+          - CSV export for contacts and campaign send logs
+          - `List-Unsubscribe` mailto header, multipart text/plain bodies, and sanitized raw HTML blocks on send
+          - Campaign status `sent_with_errors`, retry-failed, send remaining, and a send-log summary with pagination
+          - Preview with a real contact from the target lists
+          - First-run onboarding guide that stays IndexedDB-only
+      - type: changed
+        items:
+          - Send logs are upserted per recipient instead of appending duplicates on resume
+          - Backup v2 now includes suppressed emails and remains backward compatible with older files
+          - IndexedDB schema moved to v6; SMTP `batchSize` leftover removed from types
+      - type: fixed
+        items:
+          - Email validation now runs on contact edit and sender save
+          - Error pages are in English to match the rest of the UI
+          - README no longer claims a missing CSV export or TypeScript 5.9
+
   - version: 0.2.11
     date: 2026-08-22
     changes:
