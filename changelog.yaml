@@ -1,4 +1,22 @@
 versions:
+  - version: 0.4.1
+    date: 2026-08-23
+    changes:
+      - type: added
+        items:
+          - Duplicate for lists, SMTP configs, senders, and campaigns using a shared `(copy)` name
+          - Campaign search on the send and editor pages, plus list search on the lists page
+          - Send-log and contact CSV export now follow the current search and filter
+          - Reopening the setup guide still shows a completed checklist instead of disappearing
+      - type: changed
+        items:
+          - Restore confirmation counts come from the prepared payload, and a successful restore reloads the app
+          - Confirm send stays disabled until sender, SMTP, lists, recipients, and subject are ready
+      - type: fixed
+        items:
+          - Filtered send logs no longer export every row, and empty filter results show an explicit empty state
+          - Test emails no longer advertise one-click `List-Unsubscribe-Post` without an HTTPS endpoint
+
   - version: 0.4.0
     date: 2026-08-23
     changes:
