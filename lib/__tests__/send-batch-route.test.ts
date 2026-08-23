@@ -110,6 +110,10 @@ describe("POST /api/smtp/send-batch", () => {
         to: "alice@example.com",
         subject: "Hi &lt;Alice&gt; from Acme &quot;Inc&quot;",
         html: expect.stringContaining("Hello &lt;Alice&gt; A&amp;B from Acme &quot;Inc&quot;"),
+        text: expect.stringContaining("Hello"),
+        headers: {
+          "List-Unsubscribe": expect.stringContaining("mailto:unsubscribe@example.com"),
+        },
       }),
     )
     expect(data.results).toEqual([{ email: "alice@example.com", status: "sent", attempts: 1 }])

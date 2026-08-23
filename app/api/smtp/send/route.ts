@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer"
+import { htmlToPlainText } from "@/lib/html-text"
 import { smtpSendSchema } from "@/lib/validations"
 import {
   classifySmtpError,
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
       to,
       subject,
       html,
+      text: htmlToPlainText(html),
     })
 
     return smtpSuccessResponse()

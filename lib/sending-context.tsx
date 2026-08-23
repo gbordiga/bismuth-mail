@@ -2,33 +2,16 @@
 
 import { createContext, useContext, useState, useRef, useCallback, useEffect, type ReactNode } from "react"
 import { db } from "@/lib/db"
-import { type EditorBlock } from "@/lib/email-builder"
+import { parseCampaignBlocks } from "@/lib/preview"
 import { getUniqueActiveContacts } from "@/lib/repositories/campaign-repository"
+import { upsertSendLog } from "@/lib/repositories/send-log-repository"
+import {
+  computeMaxBatchSize,
+  resolveCompletedCampaignStatus,
+  selectContactsToSend,
+  summarizeSendLogs,
+} from "@/lib/send-engine"
 import { toast } from "sonner"
-
-function computeMaxBatchSize(maxConnections: number, delayMs: number): number {
-  const TIME_BUDGET_MS = 240_000
-  const AVG_TIME_PER_EMAIL_MS = 500
-  const RETRY_FACTOR = 1.5
-
-  const byThroughput = Math.floor(
-    TIME_BUDGET_MS * maxConnections / (AVG_TIME_PER_EMAIL_MS * RETRY_FACTOR)
-  )
-
-  let byTime: number
-  if (delayMs > 0) {
-    byTime = Math.min(
-      Math.floor(
-        (TIME_BUDGET_MS - AVG_TIME_PER_EMAIL_MS * RETRY_FACTOR) / delayMs
-      ) + 1,
-      byThroughput,
-    )
-  } else {
-    byTime = byThroughput
-  }
-
-  return Math.min(Math.max(byTime, 10), 500)
-}
 
 export interface SendProgress {
   total: number
@@ -50,7 +33,7 @@ interface SendingContextValue {
   activeNewsletterId: number | null
   sendProgress: SendProgress
   sendSpeed: SendSpeed
-  startSend: (newsletterId: number) => Promise<void>
+  startSend: (newsletterId: number, options?: { retryFailedOnly?: boolean }) => Promise<void>
   abortSend: () => void
 }
 
@@ -87,7 +70,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
     toast.info("Aborting...")
   }, [])
 
-  const startSend = useCallback(async (newsletterId: number) => {
+  const startSend = useCallback(async (newsletterId: number, options?: { retryFailedOnly?: boolean }) => {
     if (sending) {
       toast.error("A send is already in progress")
       return
@@ -170,13 +153,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
 
     setPhase("sending")
 
-    let blocks: EditorBlock[]
-    try {
-      blocks = JSON.parse(newsletter.htmlContent)
-    } catch {
-      blocks = [{ id: "raw", type: "html", content: newsletter.htmlContent, props: {} }]
-    }
-
+    const blocks = parseCampaignBlocks(newsletter.htmlContent)
     const allContacts = await getUniqueActiveContacts(newsletter.listIds)
 
     if (allContacts.length === 0) {
@@ -187,27 +164,25 @@ export function SendingProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const existingLogs = await db.sendLogs
-      .where("newsletterId")
-      .equals(newsletterId)
-      .toArray()
-    const alreadySent = new Set(
-      existingLogs.filter((l) => l.status === "sent").map((l) => l.contactEmail),
+    const existingLogs = await db.sendLogs.where("newsletterId").equals(newsletterId).toArray()
+    const toSend = selectContactsToSend(
+      allContacts,
+      existingLogs,
+      options?.retryFailedOnly ? "failed-only" : "remaining",
     )
-    const toSend = allContacts.filter((c) => !alreadySent.has(c.email))
 
     await db.newsletters.update(newsletterId, { status: "sending" })
 
-    let sentCount = alreadySent.size
-    let failedCount = existingLogs.filter((l) => l.status === "failed").length
+    let { sent: sentCount, failed: failedCount } = summarizeSendLogs(existingLogs)
     setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
 
     if (toSend.length === 0) {
-      await db.newsletters.update(newsletterId, { status: "sent", sentAt: new Date() })
+      const status = resolveCompletedCampaignStatus(failedCount)
+      await db.newsletters.update(newsletterId, { status, sentAt: new Date() })
       setSending(false)
       setPhase("idle")
       setActiveNewsletterId(null)
-      toast.success("All emails were already sent.")
+      toast.success(failedCount > 0 ? "No remaining failed recipients to retry." : "All emails were already sent.")
       return
     }
 
@@ -217,13 +192,11 @@ export function SendingProvider({ children }: { children: ReactNode }) {
     const unsubEmail = sender.unsubscribeEmail || sender.email
 
     sendStartTimeRef.current = Date.now()
-    const initialAlreadySent = alreadySent.size
-    const initialFailed = failedCount
+    let processedThisRun = 0
 
     function updateSpeed(sent: number, failed: number, total: number) {
       const elapsed = (Date.now() - sendStartTimeRef.current) / 1000
-      const processed = (sent - initialAlreadySent) + (failed - initialFailed)
-      const perSecond = elapsed > 0 ? processed / elapsed : 0
+      const perSecond = elapsed > 0 ? processedThisRun / elapsed : 0
       const remaining = total - sent - failed
       const etaSeconds = perSecond > 0 ? remaining / perSecond : 0
       setSendSpeed({ elapsed, perSecond, etaSeconds })
@@ -279,9 +252,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
           }[]) {
             const contact = batch.find((c) => c.email === r.email)
             const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : r.email
-            if (r.status === "sent") sentCount++
-            else failedCount++
-            await db.sendLogs.add({
+            await upsertSendLog({
               newsletterId,
               contactEmail: r.email,
               contactName,
@@ -293,8 +264,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
           }
         } else {
           for (const contact of batch) {
-            failedCount++
-            await db.sendLogs.add({
+            await upsertSendLog({
               newsletterId,
               contactEmail: contact.email,
               contactName: `${contact.firstName} ${contact.lastName}`.trim(),
@@ -309,8 +279,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
         if (abortRef.current) break
 
         for (const contact of batch) {
-          failedCount++
-          await db.sendLogs.add({
+          await upsertSendLog({
             newsletterId,
             contactEmail: contact.email,
             contactName: `${contact.firstName} ${contact.lastName}`.trim(),
@@ -322,6 +291,9 @@ export function SendingProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      processedThisRun += batch.length
+      const latestLogs = await db.sendLogs.where("newsletterId").equals(newsletterId).toArray()
+      ;({ sent: sentCount, failed: failedCount } = summarizeSendLogs(latestLogs))
       setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
       updateSpeed(sentCount, failedCount, allContacts.length)
     }
@@ -337,11 +309,16 @@ export function SendingProvider({ children }: { children: ReactNode }) {
         `Campaign paused. ${sentCount} delivered, ${failedCount} failed, ${allContacts.length - sentCount - failedCount} remaining. You can resume later.`,
       )
     } else {
-      await db.newsletters.update(newsletterId, { status: "sent", sentAt: new Date() })
+      const status = resolveCompletedCampaignStatus(failedCount)
+      await db.newsletters.update(newsletterId, { status, sentAt: new Date() })
       setSending(false)
       setPhase("idle")
       setActiveNewsletterId(null)
-      toast.success(`Campaign sent! ${sentCount} delivered, ${failedCount} failed.`)
+      toast.success(
+        failedCount > 0
+          ? `Campaign finished with errors. ${sentCount} delivered, ${failedCount} failed.`
+          : `Campaign sent! ${sentCount} delivered.`,
+      )
     }
   }, [sending])
 

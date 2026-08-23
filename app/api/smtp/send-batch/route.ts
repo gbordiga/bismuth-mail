@@ -1,6 +1,9 @@
 import nodemailer from "nodemailer"
 import { smtpSendBatchSchema } from "@/lib/validations"
 import { buildFullHtml, type EditorBlock } from "@/lib/email-builder"
+import { htmlToPlainText } from "@/lib/html-text"
+import { replaceMergeFields, type MergeContact } from "@/lib/merge-fields"
+import { buildUnsubscribeMailto } from "@/lib/preview"
 import {
   classifySmtpError,
   smtpErrorResponse,
@@ -27,39 +30,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-}
-
-interface ContactData {
-  email: string
-  firstName: string
-  lastName: string
-  customData?: Record<string, string>
-}
-
-function replaceMergeFields(html: string, contact: ContactData): string {
-  let result = html
-  result = result.replace(/\{\{email\}\}/g, escapeHtml(contact.email))
-  result = result.replace(/\{\{firstName\}\}/g, escapeHtml(contact.firstName))
-  result = result.replace(/\{\{lastName\}\}/g, escapeHtml(contact.lastName))
-  if (contact.customData) {
-    for (const [key, value] of Object.entries(contact.customData)) {
-      result = result.replace(new RegExp(`\\{\\{${escapeRegExp(key)}\\}\\}`, "g"), escapeHtml(value || ""))
-    }
-  }
-  return result
-}
+type ContactData = MergeContact
 
 type SendResult = { email: string; status: "sent" | "failed"; attempts: number; error?: string }
 
 async function sendWithRetry(
   transporter: nodemailer.Transporter,
-  mail: { from: string; replyTo: string; to: string; subject: string; html: string },
+  mail: {
+    from: string
+    replyTo: string
+    to: string
+    subject: string
+    html: string
+    text: string
+    headers?: Record<string, string>
+  },
   maxRetries: number,
 ): Promise<SendResult> {
   let lastError = ""
@@ -125,14 +110,24 @@ async function processBatchWithWorkerPool(args: {
         await sleep(delayMs)
       }
 
-      const mailtoHref = `mailto:${unsubscribeEmail}?subject=${encodeURIComponent("UNSUBSCRIBE")}&body=${encodeURIComponent(`Please remove ${contact.email} from this mailing list.`)}`
+      const mailtoHref = buildUnsubscribeMailto(unsubscribeEmail, contact.email)
       const fullHtml = buildFullHtml(blocks, signature, mailtoHref)
       const subject = replaceMergeFields(subjectTemplate, contact)
       const html = replaceMergeFields(fullHtml, contact)
 
       results[index] = await sendWithRetry(
         transporter,
-        { from: fromHeader, replyTo: replyToHeader, to: contact.email, subject, html },
+        {
+          from: fromHeader,
+          replyTo: replyToHeader,
+          to: contact.email,
+          subject,
+          html,
+          text: htmlToPlainText(html),
+          headers: {
+            "List-Unsubscribe": `<${mailtoHref}>`,
+          },
+        },
         maxRetries,
       )
     }

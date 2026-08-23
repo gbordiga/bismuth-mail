@@ -67,6 +67,12 @@ describe("SMTP route contracts", () => {
 
     expect(res.status).toBe(200)
     expect(data).toEqual({ success: true })
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: "<p>hello</p>",
+        text: "hello",
+      }),
+    )
   })
 
   it("returns categorized SMTP errors for test endpoint", async () => {
