@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { db, type SmtpConfig } from "@/lib/db"
+import { copyName } from "@/lib/operator"
 import { useDbTable } from "@/hooks/use-db-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Pencil, Trash2, Server, ShieldCheck } from "lucide-react"
+import { Plus, Pencil, Trash2, Server, ShieldCheck, Copy } from "lucide-react"
 import { toast } from "sonner"
 
 const emptyConfig: Omit<SmtpConfig, "id" | "createdAt"> = {
@@ -113,6 +114,13 @@ export function SmtpConfigSection() {
     await db.smtpConfigs.delete(pendingDeleteId)
     setPendingDeleteId(null)
     toast.success("SMTP configuration deleted")
+    loadConfigs()
+  }
+
+  async function handleDuplicate(config: SmtpConfig) {
+    const { id: _id, ...rest } = config
+    await db.smtpConfigs.add({ ...rest, name: copyName(config.name), createdAt: new Date() })
+    toast.success(`Duplicated "${config.name}"`)
     loadConfigs()
   }
 
@@ -219,6 +227,19 @@ export function SmtpConfigSection() {
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>Edit SMTP config</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Duplicate SMTP config"
+                                onClick={() => void handleDuplicate(config)}
+                              >
+                                <Copy className="size-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Duplicate SMTP config</TooltipContent>
                           </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>

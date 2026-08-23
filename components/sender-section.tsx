@@ -27,10 +27,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Pencil, Trash2, Mail } from "lucide-react"
+import { Plus, Pencil, Trash2, Mail, Copy } from "lucide-react"
 import { toast } from "sonner"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { isValidEmail, normalizeEmail } from "@/lib/email"
+import { copyName } from "@/lib/operator"
 import { useDbQuery } from "@/hooks/use-db-table"
 
 const emptySender: Omit<Sender, "id" | "createdAt"> = {
@@ -131,6 +132,13 @@ export function SenderSection() {
     void reload()
   }
 
+  async function handleDuplicate(sender: Sender) {
+    const { id: _id, ...rest } = sender
+    await db.senders.add({ ...rest, name: copyName(sender.name), createdAt: new Date() })
+    toast.success(`Duplicated "${sender.name}"`)
+    void reload()
+  }
+
   function getSmtpName(id: number) {
     return smtpConfigs.find((s) => s.id === id)?.name ?? "Unknown"
   }
@@ -210,6 +218,19 @@ export function SenderSection() {
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>Edit sender</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Duplicate sender"
+                                  onClick={() => void handleDuplicate(sender)}
+                                >
+                                  <Copy className="size-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Duplicate sender</TooltipContent>
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>

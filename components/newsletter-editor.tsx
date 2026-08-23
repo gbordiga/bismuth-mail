@@ -54,6 +54,7 @@ import { type BlockType, type EditorBlock, blockToHtml } from "@/lib/email-build
 import { buildCampaignPreviewHtml, buildCampaignPreviewSubject } from "@/lib/preview"
 import { campaignStatusLabel } from "@/lib/send-engine"
 import { getUniqueActiveContacts } from "@/lib/repositories/campaign-repository"
+import { copyName, filterCampaigns } from "@/lib/operator"
 
 function generateId() {
   return Math.random().toString(36).substring(2, 9)
@@ -411,6 +412,7 @@ export function NewsletterSection() {
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [campaignQuery, setCampaignQuery] = useState("")
 
   const [name, setName] = useState("")
   const [subject, setSubject] = useState("")
@@ -440,6 +442,7 @@ export function NewsletterSection() {
   const newsletters = data.newsletters
   const senders = data.senders
   const lists = data.lists
+  const visibleNewsletters = filterCampaigns(newsletters, campaignQuery)
 
   useEffect(() => {
     if (error) toast.error(`Could not load campaigns: ${error}`)
@@ -530,7 +533,7 @@ export function NewsletterSection() {
     await db.newsletters.add({
       ...nl,
       id: undefined,
-      name: `${nl.name} (copy)`,
+      name: copyName(nl.name),
       status: "draft",
       sentAt: null,
       createdAt: new Date(),
@@ -665,6 +668,21 @@ export function NewsletterSection() {
         ) : (
           <Card>
             <CardContent className="p-0">
+              {newsletters.length > 1 && (
+                <div className="border-b p-3">
+                  <Input
+                    value={campaignQuery}
+                    onChange={(e) => setCampaignQuery(e.target.value)}
+                    placeholder="Search campaigns by name or subject"
+                    aria-label="Search campaigns"
+                  />
+                </div>
+              )}
+              {visibleNewsletters.length === 0 ? (
+                <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+                  No campaigns match that search.
+                </p>
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -677,7 +695,7 @@ export function NewsletterSection() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {newsletters.map((nl) => (
+                  {visibleNewsletters.map((nl) => (
                     <TableRow key={nl.id}>
                       <TableCell className="font-medium">{nl.name}</TableCell>
                       <TableCell className="max-w-[200px] truncate text-sm">{nl.subject}</TableCell>
@@ -749,6 +767,7 @@ export function NewsletterSection() {
                   ))}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
         )}

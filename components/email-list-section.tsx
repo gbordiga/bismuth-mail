@@ -5,6 +5,7 @@ import { db, type EmailList, type Contact, type CustomField, type SuppressedEmai
 import { downloadCsv, parseCSV } from "@/lib/csv"
 import { isValidEmail, normalizeEmail } from "@/lib/email"
 import { planContactImport } from "@/lib/import-contacts"
+import { copyName, filterByQuery, filterContacts } from "@/lib/operator"
 import {
   getSuppressedEmailSet,
   listSuppressedEmails,
@@ -39,7 +40,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus, Sparkles, UserMinus, UserCheck, Ban } from "lucide-react"
+import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus, Sparkles, UserMinus, UserCheck, Ban, Copy } from "lucide-react"
 import { toast } from "sonner"
 
 // --- List Management Component ---
@@ -71,6 +72,7 @@ export function EmailListSection() {
   const [csvData, setCsvData] = useState<string[][]>([])
   const [csvMapping, setCsvMapping] = useState<Record<string, number>>({})
   const [searchQuery, setSearchQuery] = useState("")
+  const [listQuery, setListQuery] = useState("")
   const [lastCleanupResult, setLastCleanupResult] = useState<{
     removed: number
     invalidRemoved: number
@@ -199,7 +201,26 @@ export function EmailListSection() {
     loadLists()
   }
 
-  // --- Contact CRUD ---
+  async function handleDuplicateList(list: EmailList) {
+    const newListId = await db.emailLists.add({
+      name: copyName(list.name),
+      description: list.description,
+      customFields: list.customFields,
+      createdAt: new Date(),
+    })
+    const sourceContacts = await db.contacts.where("listId").equals(list.id!).toArray()
+    if (sourceContacts.length > 0) {
+      await db.contacts.bulkAdd(
+        sourceContacts.map(({ id: _id, ...contact }) => ({
+          ...contact,
+          listId: Number(newListId),
+        })),
+      )
+    }
+    toast.success(`Duplicated "${list.name}" with ${sourceContacts.length} contacts`)
+    loadLists()
+  }
+
   function openCreateContact() {
     setEditingContactId(null)
     setContactForm({ email: "", firstName: "", lastName: "", customData: {} })
@@ -276,7 +297,7 @@ export function EmailListSection() {
     const headers = ["email", "firstName", "lastName", "unsubscribed", ...selectedList.customFields.map((field) => field.name)]
     const rows = [
       headers,
-      ...contacts.map((contact) => [
+      ...filteredContacts.map((contact) => [
         contact.email,
         contact.firstName,
         contact.lastName,
@@ -285,7 +306,7 @@ export function EmailListSection() {
       ]),
     ]
     downloadCsv(`${selectedList.name.replace(/\s+/g, "-").toLowerCase()}-contacts.csv`, rows)
-    toast.success(`Exported ${contacts.length} contacts`)
+    toast.success(`Exported ${filteredContacts.length} contacts`)
   }
 
   async function handleAddSuppressed() {
@@ -487,15 +508,8 @@ export function EmailListSection() {
   }
 
   // Filter contacts
-  const filteredContacts = contacts.filter((c) => {
-    if (subscriptionFilter === "subscribed" && c.unsubscribed) return false
-    if (subscriptionFilter === "unsubscribed" && !c.unsubscribed) return false
-    if (!searchQuery) return true
-    const q = searchQuery.toLowerCase()
-    return (
-      c.email.toLowerCase().includes(q) || c.firstName.toLowerCase().includes(q) || c.lastName.toLowerCase().includes(q)
-    )
-  })
+  const filteredContacts = filterContacts(contacts, searchQuery, subscriptionFilter)
+  const visibleLists = filterByQuery(lists, listQuery, (list) => [list.name, list.description])
   const CONTACT_PAGE_SIZE = 50
   const contactPageCount = Math.max(1, Math.ceil(filteredContacts.length / CONTACT_PAGE_SIZE))
   const pagedContacts = filteredContacts.slice((contactPage - 1) * CONTACT_PAGE_SIZE, contactPage * CONTACT_PAGE_SIZE)
@@ -524,8 +538,21 @@ export function EmailListSection() {
             </CardContent>
           </Card>
         ) : (
+          <>
+            {lists.length > 1 && (
+              <Input
+                value={listQuery}
+                onChange={(e) => setListQuery(e.target.value)}
+                placeholder="Search lists by name or description"
+                className="max-w-md"
+                aria-label="Search lists"
+              />
+            )}
+            {visibleLists.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No lists match that search.</p>
+            ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {lists.map((list) => (
+            {visibleLists.map((list) => (
               <Card
                 key={list.id}
                 className="cursor-pointer transition-shadow hover:shadow-md focus-within:ring-2 focus-within:ring-primary/30"
@@ -571,6 +598,22 @@ export function EmailListSection() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label={`Duplicate list ${list.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void handleDuplicateList(list)
+                              }}
+                            >
+                              <Copy className="size-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Duplicate list</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               aria-label={`Delete list ${list.name}`}
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -600,6 +643,8 @@ export function EmailListSection() {
               </Card>
             ))}
           </div>
+            )}
+          </>
         )}
 
         <Card>
@@ -787,7 +832,7 @@ export function EmailListSection() {
             </Button>
           </label>
           <input id="csv-upload" type="file" accept=".csv,.txt" className="hidden" onChange={handleFileUpload} />
-          <Button variant="outline" onClick={handleExportCsv} disabled={contacts.length === 0}>
+          <Button variant="outline" onClick={handleExportCsv} disabled={filteredContacts.length === 0}>
             <Download className="mr-2 size-4" />
             Export CSV
           </Button>
@@ -879,6 +924,13 @@ export function EmailListSection() {
             <Download className="mb-4 size-12 text-muted-foreground/40" />
             <CardTitle className="mb-2 text-base">No contacts yet</CardTitle>
             <CardDescription>Add contacts manually or import from a CSV file</CardDescription>
+          </CardContent>
+        </Card>
+      ) : filteredContacts.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <CardTitle className="mb-2 text-base">No matching contacts</CardTitle>
+            <CardDescription>Try a different search or subscription filter.</CardDescription>
           </CardContent>
         </Card>
       ) : (
