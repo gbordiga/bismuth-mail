@@ -511,7 +511,8 @@ export function RichTextEditor({
           ref={editableRef}
           contentEditable
           suppressContentEditableWarning
-          className="rounded-md border bg-white p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_ul]:ml-4 [&_ul]:list-disc [&_ol]:ml-4 [&_ol]:list-decimal [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mb-1 [&_a]:text-blue-600 [&_a]:underline [&_p]:mb-1"
+          className="rounded-md border bg-background p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_ul]:ml-4 [&_ul]:list-disc [&_ol]:ml-4 [&_ol]:list-decimal [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mb-1 [&_a]:text-blue-600 [&_a]:underline [&_p]:mb-1"
+          aria-label="Email body editor"
           style={{ minHeight }}
           onInput={() => { saveSelection(); emitChange() }}
           onKeyDown={handleKeyDown}
@@ -520,7 +521,7 @@ export function RichTextEditor({
         />
       ) : mode === "source" ? (
         <Textarea
-          className="bg-white font-mono text-xs"
+          className="bg-background font-mono text-xs"
           style={{ minHeight }}
           value={currentMdSource}
           onChange={(e) => handleSourceChange(e.target.value)}
@@ -528,7 +529,7 @@ export function RichTextEditor({
         />
       ) : (
         <Textarea
-          className="bg-white font-mono text-xs"
+          className="bg-background font-mono text-xs"
           style={{ minHeight }}
           value={currentHtmlSource}
           onChange={(e) => handleHtmlChange(e.target.value)}

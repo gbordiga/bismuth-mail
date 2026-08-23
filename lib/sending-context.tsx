@@ -5,6 +5,7 @@ import { db } from "@/lib/db"
 import { parseCampaignBlocks } from "@/lib/preview"
 import { getUniqueActiveContacts } from "@/lib/repositories/campaign-repository"
 import { upsertSendLog } from "@/lib/repositories/send-log-repository"
+import { normalizeEmail } from "@/lib/email"
 import {
   computeMaxBatchSize,
   resolveCompletedCampaignStatus,
@@ -165,15 +166,16 @@ export function SendingProvider({ children }: { children: ReactNode }) {
     }
 
     const existingLogs = await db.sendLogs.where("newsletterId").equals(newsletterId).toArray()
+    const logMap = new Map(existingLogs.map((log) => [normalizeEmail(log.contactEmail), { ...log, contactEmail: normalizeEmail(log.contactEmail) }]))
     const toSend = selectContactsToSend(
       allContacts,
-      existingLogs,
+      [...logMap.values()],
       options?.retryFailedOnly ? "failed-only" : "remaining",
     )
 
     await db.newsletters.update(newsletterId, { status: "sending" })
 
-    let { sent: sentCount, failed: failedCount } = summarizeSendLogs(existingLogs)
+    let { sent: sentCount, failed: failedCount } = summarizeSendLogs([...logMap.values()])
     setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
 
     if (toSend.length === 0) {
@@ -250,11 +252,20 @@ export function SendingProvider({ children }: { children: ReactNode }) {
             attempts: number
             error?: string
           }[]) {
-            const contact = batch.find((c) => c.email === r.email)
+            const contact = batch.find((c) => normalizeEmail(c.email) === normalizeEmail(r.email))
             const contactName = contact ? `${contact.firstName} ${contact.lastName}`.trim() : r.email
             await upsertSendLog({
               newsletterId,
               contactEmail: r.email,
+              contactName,
+              status: r.status,
+              attempt: r.attempts,
+              error: r.error,
+              sentAt: new Date(),
+            })
+            logMap.set(normalizeEmail(r.email), {
+              newsletterId,
+              contactEmail: normalizeEmail(r.email),
               contactName,
               status: r.status,
               attempt: r.attempts,
@@ -267,6 +278,15 @@ export function SendingProvider({ children }: { children: ReactNode }) {
             await upsertSendLog({
               newsletterId,
               contactEmail: contact.email,
+              contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+              status: "failed",
+              attempt: 1,
+              error: data.message ?? data.error ?? "Batch request failed",
+              sentAt: new Date(),
+            })
+            logMap.set(normalizeEmail(contact.email), {
+              newsletterId,
+              contactEmail: normalizeEmail(contact.email),
               contactName: `${contact.firstName} ${contact.lastName}`.trim(),
               status: "failed",
               attempt: 1,
@@ -288,12 +308,20 @@ export function SendingProvider({ children }: { children: ReactNode }) {
             error: String(err),
             sentAt: new Date(),
           })
+          logMap.set(normalizeEmail(contact.email), {
+            newsletterId,
+            contactEmail: normalizeEmail(contact.email),
+            contactName: `${contact.firstName} ${contact.lastName}`.trim(),
+            status: "failed",
+            attempt: 1,
+            error: String(err),
+            sentAt: new Date(),
+          })
         }
       }
 
       processedThisRun += batch.length
-      const latestLogs = await db.sendLogs.where("newsletterId").equals(newsletterId).toArray()
-      ;({ sent: sentCount, failed: failedCount } = summarizeSendLogs(latestLogs))
+      ;({ sent: sentCount, failed: failedCount } = summarizeSendLogs([...logMap.values()]))
       setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
       updateSpeed(sentCount, failedCount, allContacts.length)
     }

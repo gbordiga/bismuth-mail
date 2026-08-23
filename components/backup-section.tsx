@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react"
 import { DB_SCHEMA_VERSION, db } from "@/lib/db"
-import { normalizeBackup, type BackupData } from "@/lib/backup"
+import { normalizeBackup, prepareRestorePayload, type BackupData } from "@/lib/backup"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -105,39 +105,54 @@ export function BackupSection() {
     setConfirmOpen(false)
     setImporting(true)
 
-    try {
-      await db.transaction(
-        "rw",
-        [db.smtpConfigs, db.senders, db.emailLists, db.contacts, db.newsletters, db.sendLogs, db.suppressedEmails],
-        async () => {
-          await Promise.all([
-            db.smtpConfigs.clear(),
-            db.senders.clear(),
-            db.emailLists.clear(),
-            db.contacts.clear(),
-            db.newsletters.clear(),
-            db.sendLogs.clear(),
-            db.suppressedEmails.clear(),
-          ])
+    const tables = [db.smtpConfigs, db.senders, db.emailLists, db.contacts, db.newsletters, db.sendLogs, db.suppressedEmails]
+    const snapshot = {
+      smtpConfigs: await db.smtpConfigs.toArray(),
+      senders: await db.senders.toArray(),
+      emailLists: await db.emailLists.toArray(),
+      contacts: await db.contacts.toArray(),
+      newsletters: await db.newsletters.toArray(),
+      sendLogs: await db.sendLogs.toArray(),
+      suppressedEmails: await db.suppressedEmails.toArray(),
+    }
+    const payload = prepareRestorePayload(importSummary.payload)
 
-          await db.smtpConfigs.bulkAdd(importSummary.payload.smtpConfigs as Parameters<typeof db.smtpConfigs.bulkAdd>[0])
-          await db.senders.bulkAdd(importSummary.payload.senders as Parameters<typeof db.senders.bulkAdd>[0])
-          await db.emailLists.bulkAdd(importSummary.payload.emailLists as Parameters<typeof db.emailLists.bulkAdd>[0])
-          await db.contacts.bulkAdd(importSummary.payload.contacts as Parameters<typeof db.contacts.bulkAdd>[0])
-          await db.newsletters.bulkAdd(importSummary.payload.newsletters as Parameters<typeof db.newsletters.bulkAdd>[0])
-          await db.sendLogs.bulkAdd(importSummary.payload.sendLogs as Parameters<typeof db.sendLogs.bulkAdd>[0])
-          if (importSummary.payload.suppressedEmails.length > 0) {
-            await db.suppressedEmails.bulkAdd(
-              importSummary.payload.suppressedEmails as Parameters<typeof db.suppressedEmails.bulkAdd>[0],
-            )
-          }
-        },
-      )
+    try {
+      await db.transaction("rw", tables, async () => {
+        await Promise.all(tables.map((table) => table.clear()))
+        await db.smtpConfigs.bulkAdd(payload.smtpConfigs as Parameters<typeof db.smtpConfigs.bulkAdd>[0])
+        await db.senders.bulkAdd(payload.senders as Parameters<typeof db.senders.bulkAdd>[0])
+        await db.emailLists.bulkAdd(payload.emailLists as Parameters<typeof db.emailLists.bulkAdd>[0])
+        await db.contacts.bulkAdd(payload.contacts as Parameters<typeof db.contacts.bulkAdd>[0])
+        await db.newsletters.bulkAdd(payload.newsletters as Parameters<typeof db.newsletters.bulkAdd>[0])
+        await db.sendLogs.bulkAdd(payload.sendLogs as Parameters<typeof db.sendLogs.bulkAdd>[0])
+        if (payload.suppressedEmails.length > 0) {
+          await db.suppressedEmails.bulkAdd(
+            payload.suppressedEmails as Parameters<typeof db.suppressedEmails.bulkAdd>[0],
+          )
+        }
+      })
 
       toast.success("Backup imported successfully! Reload the page to see all data.")
       setImportSummary(null)
     } catch (err) {
-      toast.error("Import failed: " + String(err))
+      try {
+        await db.transaction("rw", tables, async () => {
+          await Promise.all(tables.map((table) => table.clear()))
+          await db.smtpConfigs.bulkAdd(snapshot.smtpConfigs)
+          await db.senders.bulkAdd(snapshot.senders)
+          await db.emailLists.bulkAdd(snapshot.emailLists)
+          await db.contacts.bulkAdd(snapshot.contacts)
+          await db.newsletters.bulkAdd(snapshot.newsletters)
+          await db.sendLogs.bulkAdd(snapshot.sendLogs)
+          if (snapshot.suppressedEmails.length > 0) {
+            await db.suppressedEmails.bulkAdd(snapshot.suppressedEmails)
+          }
+        })
+        toast.error("Import failed and the previous data was restored: " + String(err))
+      } catch (restoreErr) {
+        toast.error("Import failed and rollback also failed: " + String(restoreErr))
+      }
     } finally {
       setImporting(false)
     }

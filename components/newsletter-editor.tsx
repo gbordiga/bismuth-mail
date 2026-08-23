@@ -51,7 +51,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { RichTextEditor } from "@/components/rich-text-editor"
 
 import { type BlockType, type EditorBlock, blockToHtml } from "@/lib/email-builder"
-import { buildCampaignPreviewHtml } from "@/lib/preview"
+import { buildCampaignPreviewHtml, buildCampaignPreviewSubject } from "@/lib/preview"
 import { campaignStatusLabel } from "@/lib/send-engine"
 import { getUniqueActiveContacts } from "@/lib/repositories/campaign-repository"
 
@@ -418,6 +418,7 @@ export function NewsletterSection() {
   const [selectedListIds, setSelectedListIds] = useState<number[]>([])
   const [blocks, setBlocks] = useState<EditorBlock[]>([])
   const [previewHtml, setPreviewHtml] = useState("")
+  const [previewSubject, setPreviewSubject] = useState("")
   const [previewContacts, setPreviewContacts] = useState<Contact[]>([])
   const [previewContactEmail, setPreviewContactEmail] = useState("")
   const previewRef = useRef<HTMLIFrameElement>(null)
@@ -552,6 +553,7 @@ export function NewsletterSection() {
         contact: selected,
       }),
     )
+    setPreviewSubject(buildCampaignPreviewSubject(subject, selected))
     setPreviewOpen(true)
   }
 
@@ -567,6 +569,7 @@ export function NewsletterSection() {
         contact: selected,
       }),
     )
+    setPreviewSubject(buildCampaignPreviewSubject(subject, selected))
   }
 
   function toggleListSelection(listId: number) {
@@ -594,6 +597,12 @@ export function NewsletterSection() {
         <DialogHeader>
           <DialogTitle>Email Preview</DialogTitle>
         </DialogHeader>
+        {previewSubject && (
+          <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+            <span className="text-muted-foreground">Subject: </span>
+            {previewSubject}
+          </p>
+        )}
         {previewContacts.length > 0 && (
           <Select value={previewContactEmail} onValueChange={updatePreviewContact}>
             <SelectTrigger className="w-full">

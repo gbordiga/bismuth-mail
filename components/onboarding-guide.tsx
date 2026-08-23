@@ -8,12 +8,19 @@ import { Card, CardContent } from "@/components/ui/card"
 import { CheckCircle2, Circle, X } from "lucide-react"
 
 const STORAGE_KEY = "bismuth-onboarding-dismissed"
+const REOPEN_EVENT = "bismuth-onboarding-reopen"
+
+export function reopenOnboarding() {
+  window.localStorage.removeItem(STORAGE_KEY)
+  window.dispatchEvent(new Event(REOPEN_EVENT))
+}
 
 interface SetupProgress {
   smtp: boolean
   sender: boolean
   list: boolean
   campaign: boolean
+  send: boolean
 }
 
 export function OnboardingGuide() {
@@ -26,24 +33,33 @@ export function OnboardingGuide() {
       return
     }
     setDismissed(false)
-    const [smtpCount, senderCount, listCount, contactCount, campaignCount] = await Promise.all([
+    const [smtpCount, senderCount, listCount, contactCount, campaignCount, sentCount] = await Promise.all([
       db.smtpConfigs.count(),
       db.senders.count(),
       db.emailLists.count(),
       db.contacts.count(),
       db.newsletters.count(),
+      db.newsletters.filter((nl) => nl.status === "sent" || nl.status === "sent_with_errors").count(),
     ])
     setProgress({
       smtp: smtpCount > 0,
       sender: senderCount > 0,
       list: listCount > 0 && contactCount > 0,
       campaign: campaignCount > 0,
+      send: sentCount > 0,
     })
   }, [])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial IndexedDB + localStorage read
     void load()
+    const reopen = () => {
+      window.localStorage.removeItem(STORAGE_KEY)
+      setDismissed(false)
+      void load()
+    }
+    window.addEventListener(REOPEN_EVENT, reopen)
+    return () => window.removeEventListener(REOPEN_EVENT, reopen)
   }, [load])
 
   if (dismissed || !progress) return null
@@ -53,6 +69,7 @@ export function OnboardingGuide() {
     { key: "sender", done: progress.sender, href: "/senders", label: "Create a sender profile" },
     { key: "list", done: progress.list, href: "/lists", label: "Add a list with contacts" },
     { key: "campaign", done: progress.campaign, href: "/editor", label: "Compose a campaign" },
+    { key: "send", done: progress.send, href: "/send", label: "Send your first campaign" },
   ] as const
 
   if (steps.every((step) => step.done)) return null

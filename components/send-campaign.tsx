@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { db, type Newsletter, type Sender, type EmailList, type SmtpConfig, type SendLog, type Contact } from "@/lib/db"
 import { downloadCsv } from "@/lib/csv"
+import { isValidEmail } from "@/lib/email"
+import { replaceMergeFields } from "@/lib/merge-fields"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,7 +32,7 @@ import {
   loadSendLogsByNewsletter,
 } from "@/lib/repositories/campaign-repository"
 import { campaignStatusLabel, summarizeSendLogs } from "@/lib/send-engine"
-import { buildCampaignPreviewHtml, parseCampaignBlocks } from "@/lib/preview"
+import { buildCampaignPreviewHtml, buildCampaignPreviewSubject, buildUnsubscribeMailto, parseCampaignBlocks } from "@/lib/preview"
 
 interface ErrorDiagnostic {
   category: string
@@ -108,6 +110,12 @@ export function SendCampaignSection() {
   const [testEmailAddress, setTestEmailAddress] = useState("")
   const [sendingTest, setSendingTest] = useState(false)
   const [logPage, setLogPage] = useState(1)
+  const [previewSubject, setPreviewSubject] = useState("")
+  const [logFilter, setLogFilter] = useState<"all" | "sent" | "failed">("all")
+  const [logQuery, setLogQuery] = useState("")
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
+
+  const LAST_CAMPAIGN_KEY = "bismuth-last-campaign-id"
 
   const { sending, phase, activeNewsletterId, sendProgress, sendSpeed, startSend, abortSend } = useSending()
 
@@ -125,6 +133,19 @@ export function SendCampaignSection() {
     load()
   }, [load])
 
+  useEffect(() => {
+    if (selectedNlId == null) return
+    window.localStorage.setItem(LAST_CAMPAIGN_KEY, String(selectedNlId))
+  }, [selectedNlId])
+
+  useEffect(() => {
+    if (selectedNlId != null || newsletters.length === 0) return
+    const stored = Number(window.localStorage.getItem(LAST_CAMPAIGN_KEY))
+    if (newsletters.some((item) => item.id === stored)) {
+      setSelectedNlId(stored)
+    }
+  }, [newsletters, selectedNlId])
+
   // Reload data when sending finishes
   useEffect(() => {
     if (!sending) {
@@ -136,11 +157,14 @@ export function SendCampaignSection() {
   useEffect(() => {
     if (selectedNlId) {
       loadSendLogsByNewsletter(selectedNlId).then(setSendLogs)
-      setLogPage(1)
     } else {
       setSendLogs([])
     }
   }, [selectedNlId, sendProgress])
+
+  useEffect(() => {
+    setLogPage(1)
+  }, [selectedNlId, logFilter, logQuery])
 
   useEffect(() => {
     if (!selectedNlId) {
@@ -178,6 +202,7 @@ export function SendCampaignSection() {
         contact,
       }),
     )
+    setPreviewSubject(buildCampaignPreviewSubject(selectedNl.subject, contact))
   }
 
   async function showPreview() {
@@ -187,6 +212,10 @@ export function SendCampaignSection() {
 
   async function handleSendTest() {
     if (!selectedNl || !testEmailAddress.trim()) return
+    if (!isValidEmail(testEmailAddress)) {
+      toast.error("Please enter a valid test email address")
+      return
+    }
     setSendingTest(true)
 
     const sender = senders.find((s) => s.id === selectedNl.senderId)
@@ -199,14 +228,16 @@ export function SendCampaignSection() {
     }
 
     const previewContact = previewContacts.find((item) => item.email === previewContactEmail)
+    const mergeContact = previewContact
+      ? { ...previewContact, email: testEmailAddress.trim() }
+      : { email: testEmailAddress.trim(), firstName: "John", lastName: "Doe", customData: {} }
     const html = buildCampaignPreviewHtml({
       blocks: parseCampaignBlocks(selectedNl.htmlContent),
       signature: sender.signature,
       unsubscribeEmail: sender.unsubscribeEmail || sender.email,
-      contact: previewContact
-        ? { ...previewContact, email: testEmailAddress.trim() }
-        : { email: testEmailAddress.trim(), firstName: "John", lastName: "Doe", customData: {} },
+      contact: mergeContact,
     })
+    const unsubMailto = buildUnsubscribeMailto(sender.unsubscribeEmail || sender.email, testEmailAddress.trim())
 
     try {
       const res = await fetch("/api/smtp/send", {
@@ -222,8 +253,12 @@ export function SendCampaignSection() {
           from: { name: sender.name, email: sender.email },
           replyTo: sender.replyTo || sender.email,
           to: testEmailAddress.trim(),
-          subject: `[TEST] ${selectedNl.subject}`,
+          subject: `[TEST] ${replaceMergeFields(selectedNl.subject, mergeContact)}`,
           html,
+          headers: {
+            "List-Unsubscribe": `<${unsubMailto}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
         }),
       })
 
@@ -275,8 +310,29 @@ export function SendCampaignSection() {
     await db.sendLogs.where("newsletterId").equals(selectedNl.id!).delete()
     await db.newsletters.update(selectedNl.id!, { status: "draft" })
     toast.info("Campaign reset to draft. All send logs cleared.")
+    setResetConfirmOpen(false)
     load()
   }
+
+  const filteredLogs = sendLogs.filter((log) => {
+    if (logFilter === "sent" && log.status !== "sent") return false
+    if (logFilter === "failed" && log.status !== "failed") return false
+    if (!logQuery.trim()) return true
+    const q = logQuery.trim().toLowerCase()
+    return (
+      log.contactEmail.toLowerCase().includes(q) ||
+      log.contactName.toLowerCase().includes(q) ||
+      (log.error ?? "").toLowerCase().includes(q)
+    )
+  })
+
+  const senderReady = Boolean(selectedNl?.senderId)
+  const listsReady = (selectedNl?.listIds.length ?? 0) > 0
+  const hasRecipients = recipientCount > 0
+  const subjectReady = Boolean(selectedNl?.subject.trim())
+  const smtpReady = Boolean(
+    selectedNl && senders.find((s) => s.id === selectedNl.senderId)?.smtpConfigId,
+  )
 
   const progressPct =
     sendProgress.total > 0 ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100 : 0
@@ -424,7 +480,7 @@ export function SendCampaignSection() {
                     </Button>
                   )}
                   {selectedNl.status !== "draft" && !isThisCampaignSending && (
-                    <Button size="sm" variant="outline" onClick={handleResetToDraft} disabled={sending}>
+                    <Button size="sm" variant="outline" onClick={() => setResetConfirmOpen(true)} disabled={sending}>
                       Reset to Draft
                     </Button>
                   )}
@@ -574,12 +630,30 @@ export function SendCampaignSection() {
       {sendLogs.length > 0 && (
         <Card>
           <CardContent className="p-0">
-            <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
-              <h3 className="text-sm font-medium text-foreground">Send Log ({sendLogs.length} entries)</h3>
-              <Button variant="outline" size="sm" onClick={handleExportLogs}>
-                <Download className="mr-2 size-4" />
-                Export CSV
-              </Button>
+            <div className="flex flex-col gap-3 border-b px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-sm font-medium text-foreground">Send Log ({filteredLogs.length} of {sendLogs.length})</h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  placeholder="Search logs"
+                  value={logQuery}
+                  onChange={(e) => setLogQuery(e.target.value)}
+                  className="h-8 w-44"
+                />
+                <Select value={logFilter} onValueChange={(v) => setLogFilter(v as "all" | "sent" | "failed")}>
+                  <SelectTrigger className="h-8 w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="sent">Sent</SelectItem>
+                    <SelectItem value="failed">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" onClick={handleExportLogs}>
+                  <Download className="mr-2 size-4" />
+                  Export CSV
+                </Button>
+              </div>
             </div>
             <Table>
               <TableHeader>
@@ -592,7 +666,7 @@ export function SendCampaignSection() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sendLogs.slice((logPage - 1) * LOG_PAGE_SIZE, logPage * LOG_PAGE_SIZE).map((log) => (
+                {filteredLogs.slice((logPage - 1) * LOG_PAGE_SIZE, logPage * LOG_PAGE_SIZE).map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="font-mono text-xs">{log.contactEmail}</TableCell>
                     <TableCell className="text-sm">{log.contactName}</TableCell>
@@ -624,10 +698,10 @@ export function SendCampaignSection() {
                 ))}
               </TableBody>
             </Table>
-            {sendLogs.length > LOG_PAGE_SIZE && (
+            {filteredLogs.length > LOG_PAGE_SIZE && (
               <div className="flex items-center justify-between border-t px-5 py-3 text-sm">
                 <span className="text-muted-foreground">
-                  Page {logPage} of {Math.ceil(sendLogs.length / LOG_PAGE_SIZE)}
+                  Page {logPage} of {Math.ceil(filteredLogs.length / LOG_PAGE_SIZE)}
                 </span>
                 <div className="flex gap-2">
                   <Button
@@ -641,7 +715,7 @@ export function SendCampaignSection() {
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={logPage >= Math.ceil(sendLogs.length / LOG_PAGE_SIZE)}
+                    disabled={logPage >= Math.ceil(filteredLogs.length / LOG_PAGE_SIZE)}
                     onClick={() => setLogPage((page) => page + 1)}
                   >
                     Next
@@ -667,6 +741,16 @@ export function SendCampaignSection() {
               cannot be undone.
             </DialogDescription>
           </DialogHeader>
+          <ul className="grid gap-1.5 text-sm">
+            <li className={senderReady ? "text-foreground" : "text-destructive"}>Sender: {senderReady ? "ready" : "missing"}</li>
+            <li className={smtpReady ? "text-foreground" : "text-destructive"}>SMTP: {smtpReady ? "ready" : "missing"}</li>
+            <li className={listsReady ? "text-foreground" : "text-destructive"}>Lists: {listsReady ? "selected" : "none"}</li>
+            <li className={hasRecipients ? "text-foreground" : "text-destructive"}>Recipients: {recipientCount}</li>
+            <li className={subjectReady ? "text-foreground" : "text-destructive"}>Subject: {subjectReady ? "set" : "empty"}</li>
+            {selectedNl && selectedNl.subject.length > 78 && (
+              <li className="text-warning">Subject is longer than 78 characters and may be truncated by some clients.</li>
+            )}
+          </ul>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
@@ -685,6 +769,12 @@ export function SendCampaignSection() {
           <DialogHeader>
             <DialogTitle>Email Preview</DialogTitle>
           </DialogHeader>
+          {previewSubject && (
+            <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Subject: </span>
+              {previewSubject}
+            </p>
+          )}
           {previewContacts.length > 0 && (
             <div className="grid gap-2">
               <Label>Preview as contact</Label>
@@ -751,6 +841,25 @@ export function SendCampaignSection() {
             <Button onClick={handleSendTest} disabled={sendingTest || !testEmailAddress.trim()}>
               {sendingTest ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Send className="mr-2 size-4" />}
               {sendingTest ? "Sending..." : "Send Test"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset campaign to draft?</DialogTitle>
+            <DialogDescription>
+              This clears all send logs for this campaign and sets it back to draft. Recipients can be emailed again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void handleResetToDraft()}>
+              Reset to draft
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from "react"
 import { db, type EmailList, type Contact, type CustomField, type SuppressedEmail } from "@/lib/db"
 import { downloadCsv, parseCSV } from "@/lib/csv"
 import { isValidEmail, normalizeEmail } from "@/lib/email"
+import { planContactImport } from "@/lib/import-contacts"
 import {
+  getSuppressedEmailSet,
   listSuppressedEmails,
   setEmailSubscription,
   suppressEmail,
@@ -81,8 +83,11 @@ export function EmailListSection() {
     invalid: number
     duplicatesInImport: number
     existingSkipped: number
+    suppressedSkipped: number
     at: Date
   } | null>(null)
+  const [contactPage, setContactPage] = useState(1)
+  const [subscriptionFilter, setSubscriptionFilter] = useState<"all" | "subscribed" | "unsubscribed">("all")
   const [suppressed, setSuppressed] = useState<SuppressedEmail[]>([])
   const [suppressEmailInput, setSuppressEmailInput] = useState("")
 
@@ -304,6 +309,18 @@ export function EmailListSection() {
     if (selectedList) loadContacts(selectedList.id!)
   }
 
+  function handleExportSuppressed() {
+    if (suppressed.length === 0) {
+      toast.error("The suppression list is empty")
+      return
+    }
+    downloadCsv("suppressed-emails.csv", [
+      ["email", "reason", "createdAt"],
+      ...suppressed.map((row) => [row.email, row.reason, row.createdAt ? new Date(row.createdAt).toISOString() : ""]),
+    ])
+    toast.success(`Exported ${suppressed.length} suppressed emails`)
+  }
+
   async function handleDeleteContact(id: number) {
     setPendingDeleteContactId(id)
   }
@@ -338,6 +355,7 @@ export function EmailListSection() {
         if (h.includes("email") || h.includes("mail")) mapping.email = i
         if (h.includes("first") || h.includes("nome")) mapping.firstName = i
         if (h.includes("last") || h.includes("cognome") || h.includes("surname")) mapping.lastName = i
+        if (h.includes("unsub") || h === "status") mapping.unsubscribed = i
       })
       // Map custom fields
       if (selectedList?.customFields) {
@@ -361,56 +379,38 @@ export function EmailListSection() {
     const dataRows = csvData.slice(1)
 
     const existingContacts = await db.contacts.where("listId").equals(selectedList!.id!).toArray()
-    const existingEmails = new Set(existingContacts.map((c) => c.email.trim().toLowerCase()))
-
-    const importEmails = new Set<string>()
-    const toAdd: Omit<Contact, "id">[] = []
-    let invalid = 0
-    let duplicatesInImport = 0
-
-    for (const row of dataRows) {
-      const rawEmail = row[csvMapping.email]?.trim() ?? ""
-      const normalizedEmail = normalizeEmail(rawEmail)
-
-      if (!isValidEmail(normalizedEmail)) {
-        invalid++
-        continue
+    const suppressedEmails = await getSuppressedEmailSet()
+    const custom: Record<string, number> = {}
+    if (selectedList?.customFields) {
+      for (const cf of selectedList.customFields) {
+        const idx = csvMapping[`custom_${cf.name}`]
+        if (idx !== undefined) custom[cf.name] = idx
       }
-
-      if (importEmails.has(normalizedEmail)) {
-        duplicatesInImport++
-        continue
-      }
-
-      if (existingEmails.has(normalizedEmail)) {
-        continue
-      }
-
-      importEmails.add(normalizedEmail)
-
-      const customData: Record<string, string> = {}
-      if (selectedList?.customFields) {
-        selectedList.customFields.forEach((cf) => {
-          const idx = csvMapping[`custom_${cf.name}`]
-          if (idx !== undefined && row[idx]) {
-            customData[cf.name] = row[idx].trim()
-          }
-        })
-      }
-
-      toAdd.push({
-        listId: selectedList!.id!,
-        email: normalizedEmail,
-        firstName: csvMapping.firstName !== undefined ? (row[csvMapping.firstName]?.trim() ?? "") : "",
-        lastName: csvMapping.lastName !== undefined ? (row[csvMapping.lastName]?.trim() ?? "") : "",
-        customData,
-        subscribedAt: new Date(),
-        unsubscribed: false,
-      })
     }
 
-    const existingSkipped = dataRows.length - invalid - duplicatesInImport - toAdd.length
-    const skipped = invalid + duplicatesInImport + existingSkipped
+    const plan = planContactImport({
+      dataRows,
+      mapping: {
+        email: csvMapping.email,
+        firstName: csvMapping.firstName,
+        lastName: csvMapping.lastName,
+        unsubscribed: csvMapping.unsubscribed,
+        custom,
+      },
+      existingEmails: existingContacts.map((c) => c.email),
+      suppressedEmails,
+    })
+
+    const toAdd: Omit<Contact, "id">[] = plan.toAdd.map((row) => ({
+      listId: selectedList!.id!,
+      email: row.email,
+      firstName: row.firstName,
+      lastName: row.lastName,
+      customData: row.customData,
+      subscribedAt: new Date(),
+      unsubscribed: row.unsubscribed,
+    }))
+    const skipped = plan.invalid + plan.duplicatesInFile + plan.alreadyInList + plan.suppressedSkipped
 
     if (toAdd.length > 0) {
       await db.contacts.bulkAdd(toAdd)
@@ -419,14 +419,15 @@ export function EmailListSection() {
     setLastImportReport({
       imported: toAdd.length,
       skipped,
-      invalid,
-      duplicatesInImport,
-      existingSkipped,
+      invalid: plan.invalid,
+      duplicatesInImport: plan.duplicatesInFile,
+      existingSkipped: plan.alreadyInList,
+      suppressedSkipped: plan.suppressedSkipped,
       at: new Date(),
     })
 
     toast.success(
-      `Imported ${toAdd.length}. Skipped ${skipped} (invalid: ${invalid}, duplicates in file: ${duplicatesInImport}, already in list: ${existingSkipped})`
+      `Imported ${toAdd.length}. Skipped ${skipped} (invalid: ${plan.invalid}, duplicates in file: ${plan.duplicatesInFile}, already in list: ${plan.alreadyInList}, suppressed: ${plan.suppressedSkipped})`
     )
     setImportDialogOpen(false)
     setCsvData([])
@@ -487,12 +488,17 @@ export function EmailListSection() {
 
   // Filter contacts
   const filteredContacts = contacts.filter((c) => {
+    if (subscriptionFilter === "subscribed" && c.unsubscribed) return false
+    if (subscriptionFilter === "unsubscribed" && !c.unsubscribed) return false
     if (!searchQuery) return true
     const q = searchQuery.toLowerCase()
     return (
       c.email.toLowerCase().includes(q) || c.firstName.toLowerCase().includes(q) || c.lastName.toLowerCase().includes(q)
     )
   })
+  const CONTACT_PAGE_SIZE = 50
+  const contactPageCount = Math.max(1, Math.ceil(filteredContacts.length / CONTACT_PAGE_SIZE))
+  const pagedContacts = filteredContacts.slice((contactPage - 1) * CONTACT_PAGE_SIZE, contactPage * CONTACT_PAGE_SIZE)
 
   // --- Render: List View ---
   if (!selectedList) {
@@ -619,6 +625,9 @@ export function EmailListSection() {
               />
               <Button variant="outline" onClick={() => void handleAddSuppressed()}>
                 Suppress
+              </Button>
+              <Button variant="outline" onClick={handleExportSuppressed} disabled={suppressed.length === 0}>
+                Export CSV
               </Button>
             </div>
             {suppressed.length === 0 ? (
@@ -793,9 +802,28 @@ export function EmailListSection() {
       <Input
         placeholder="Search contacts by email, first name, or last name..."
         value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
+        onChange={(e) => {
+          setSearchQuery(e.target.value)
+          setContactPage(1)
+        }}
         className="max-w-md"
       />
+      <Select
+        value={subscriptionFilter}
+        onValueChange={(v) => {
+          setSubscriptionFilter(v as "all" | "subscribed" | "unsubscribed")
+          setContactPage(1)
+        }}
+      >
+        <SelectTrigger className="w-[180px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All contacts</SelectItem>
+          <SelectItem value="subscribed">Subscribed</SelectItem>
+          <SelectItem value="unsubscribed">Unsubscribed</SelectItem>
+        </SelectContent>
+      </Select>
 
       {/* Validation Summary Cards */}
       {(lastCleanupResult || lastImportReport) && (
@@ -836,6 +864,9 @@ export function EmailListSection() {
                 <p className="text-sm">
                   Skipped already in list: <span className="font-semibold">{lastImportReport.existingSkipped}</span>
                 </p>
+                <p className="text-sm">
+                  Skipped suppressed: <span className="font-semibold">{lastImportReport.suppressedSkipped}</span>
+                </p>
               </CardContent>
             </Card>
           )}
@@ -867,7 +898,7 @@ export function EmailListSection() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredContacts.map((contact) => (
+                {pagedContacts.map((contact) => (
                   <TableRow key={contact.id}>
                     <TableCell className="font-mono text-xs">{contact.email}</TableCell>
                     <TableCell>{contact.firstName}</TableCell>
@@ -943,6 +974,31 @@ export function EmailListSection() {
                 ))}
               </TableBody>
             </Table>
+            {filteredContacts.length > CONTACT_PAGE_SIZE && (
+              <div className="flex items-center justify-between border-t px-4 py-3 text-sm">
+                <span className="text-muted-foreground">
+                  Page {contactPage} of {contactPageCount} · {filteredContacts.length} contacts
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={contactPage === 1}
+                    onClick={() => setContactPage((page) => Math.max(1, page - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={contactPage >= contactPageCount}
+                    onClick={() => setContactPage((page) => Math.min(contactPageCount, page + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1080,6 +1136,33 @@ export function EmailListSection() {
                         setCsvMapping(m)
                       } else {
                         setCsvMapping({ ...csvMapping, lastName: parseInt(v) })
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Skip</SelectItem>
+                      {csvData[0].map((h, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {h || `Column ${i + 1}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 items-center gap-4">
+                  <Label>Unsubscribed Column</Label>
+                  <Select
+                    value={csvMapping.unsubscribed !== undefined ? String(csvMapping.unsubscribed) : "none"}
+                    onValueChange={(v) => {
+                      if (v === "none") {
+                        const m = { ...csvMapping }
+                        delete m.unsubscribed
+                        setCsvMapping(m)
+                      } else {
+                        setCsvMapping({ ...csvMapping, unsubscribed: parseInt(v) })
                       }
                     }}
                   >

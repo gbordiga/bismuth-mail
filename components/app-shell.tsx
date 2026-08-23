@@ -5,13 +5,13 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
-import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon, Loader2 } from "lucide-react"
+import { Mail, Server, Users, FileEdit, Send, Menu, X, DatabaseBackup, Sun, Moon, Loader2, LifeBuoy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useSending } from "@/lib/sending-context"
 import { ChangelogModal } from "@/components/changelog-modal"
-import { OnboardingGuide } from "@/components/onboarding-guide"
+import { OnboardingGuide, reopenOnboarding } from "@/components/onboarding-guide"
 
 const navItems = [
   { id: "smtp", label: "SMTP Config", href: "/smtp", icon: Server },
@@ -173,6 +173,20 @@ export function AppShell({ children }: AppShellProps) {
               </p>
             </button>
             <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    onClick={() => reopenOnboarding()}
+                    aria-label="Show setup guide"
+                  >
+                    <LifeBuoy className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Setup guide</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
