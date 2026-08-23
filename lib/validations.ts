@@ -27,12 +27,24 @@ export const smtpSendSchema = z.object({
   subject: z.string().min(1).max(998),
   html: z.string().min(1).max(5_000_000),
   headers: z.record(z.string(), z.string()).optional(),
+  attachments: z
+    .array(
+      z.object({
+        filename: z.string().min(1).max(255),
+        content: z.string().min(1).max(8_000_000),
+        encoding: z.literal("base64"),
+        contentType: z.string().min(1).max(200),
+        cid: z.string().max(200).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
 })
 
 const editorBlockSchema = z.object({
   id: z.string(),
-  type: z.enum(["text", "image", "button", "divider", "html"]),
-  content: z.string().max(50_000),
+  type: z.enum(["text", "image", "button", "divider", "html", "attachment"]),
+  content: z.string().max(8_000_000),
   props: z.record(z.string(), z.string()),
 })
 

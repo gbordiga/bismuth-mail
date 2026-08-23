@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer"
 import { smtpSendBatchSchema } from "@/lib/validations"
+import { collectMailAttachments } from "@/lib/attachments"
 import { buildFullHtml, type EditorBlock } from "@/lib/email-builder"
 import { htmlToPlainText } from "@/lib/html-text"
 import { replaceMergeFields, type MergeContact } from "@/lib/merge-fields"
@@ -44,6 +45,7 @@ async function sendWithRetry(
     html: string
     text: string
     headers?: Record<string, string>
+    attachments?: ReturnType<typeof collectMailAttachments>
   },
   maxRetries: number,
 ): Promise<SendResult> {
@@ -76,6 +78,7 @@ async function processBatchWithWorkerPool(args: {
   maxRetries: number
   fromHeader: string
   replyToHeader: string
+  attachments: ReturnType<typeof collectMailAttachments>
 }): Promise<SendResult[]> {
   const {
     contacts,
@@ -89,6 +92,7 @@ async function processBatchWithWorkerPool(args: {
     maxRetries,
     fromHeader,
     replyToHeader,
+    attachments,
   } = args
 
   const results: SendResult[] = new Array(contacts.length)
@@ -127,6 +131,7 @@ async function processBatchWithWorkerPool(args: {
           headers: {
             "List-Unsubscribe": `<${mailtoHref}>`,
           },
+          attachments,
         },
         maxRetries,
       )
@@ -179,6 +184,7 @@ export async function POST(req: Request) {
       maxRetries,
       fromHeader,
       replyToHeader,
+      attachments: collectMailAttachments(blocks as EditorBlock[]),
     })
 
     return smtpSuccessResponse({ results })

@@ -75,6 +75,47 @@ describe("SMTP route contracts", () => {
     )
   })
 
+  it("forwards attachments on the send endpoint", async () => {
+    sendMailMock.mockResolvedValueOnce({ accepted: ["to@example.com"] })
+
+    const res = await sendPost(
+      jsonRequest("http://localhost/api/smtp/send", {
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          auth: { user: "user", pass: "pass" },
+        },
+        from: { name: "Team", email: "team@example.com" },
+        to: "to@example.com",
+        subject: "Subject",
+        html: "<p>hello</p>",
+        attachments: [
+          {
+            filename: "brief.pdf",
+            content: "JVBERi0=",
+            encoding: "base64",
+            contentType: "application/pdf",
+          },
+        ],
+      }),
+    )
+
+    expect(res.status).toBe(200)
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          {
+            filename: "brief.pdf",
+            content: "JVBERi0=",
+            encoding: "base64",
+            contentType: "application/pdf",
+          },
+        ],
+      }),
+    )
+  })
+
   it("forwards optional headers on the send endpoint", async () => {
     sendMailMock.mockResolvedValueOnce({ accepted: ["to@example.com"] })
 

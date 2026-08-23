@@ -1,6 +1,7 @@
 import DOMPurify from "isomorphic-dompurify"
+import { imageContentId, parseDataUrl } from "@/lib/attachments"
 
-export type BlockType = "text" | "image" | "button" | "divider" | "html"
+export type BlockType = "text" | "image" | "button" | "divider" | "html" | "attachment"
 
 export function escapeHtmlAttribute(value: string): string {
   return value
@@ -10,11 +11,92 @@ export function escapeHtmlAttribute(value: string): string {
     .replace(/>/g, "&gt;")
 }
 
+const EDITOR_ALLOWED_TAGS = [
+  "a",
+  "b",
+  "blockquote",
+  "br",
+  "caption",
+  "center",
+  "code",
+  "col",
+  "colgroup",
+  "del",
+  "div",
+  "em",
+  "figcaption",
+  "figure",
+  "font",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "hr",
+  "i",
+  "img",
+  "li",
+  "ol",
+  "p",
+  "pre",
+  "s",
+  "small",
+  "span",
+  "strike",
+  "strong",
+  "sub",
+  "sup",
+  "table",
+  "tbody",
+  "td",
+  "tfoot",
+  "th",
+  "thead",
+  "tr",
+  "u",
+  "ul",
+]
+
+const EDITOR_ALLOWED_ATTR = [
+  "align",
+  "alt",
+  "background",
+  "bgcolor",
+  "border",
+  "cellpadding",
+  "cellspacing",
+  "color",
+  "colspan",
+  "face",
+  "height",
+  "href",
+  "rel",
+  "role",
+  "rowspan",
+  "scope",
+  "size",
+  "src",
+  "style",
+  "target",
+  "title",
+  "valign",
+  "width",
+]
+
 export function sanitizeEmailHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
     ADD_TAGS: ["style"],
     ADD_ATTR: ["target", "style"],
+  })
+}
+
+export function sanitizeEditorHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: EDITOR_ALLOWED_TAGS,
+    ALLOWED_ATTR: EDITOR_ALLOWED_ATTR,
+    ALLOW_DATA_ATTR: false,
   })
 }
 
@@ -27,20 +109,29 @@ export interface EditorBlock {
 
 export function blockToHtml(block: EditorBlock, preview = false): string {
   switch (block.type) {
-    case "text":
-      return `<div style="padding: 8px 0;">${block.content}</div>`
-    case "image":
+    case "text": {
+      const text = block.content.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim()
+      if (text === "Write your text here...") return ""
+      if (!text && !/<img|<table/i.test(block.content)) return ""
+      return `<div style="padding: 8px 0;">${sanitizeEditorHtml(block.content)}</div>`
+    }
+    case "image": {
       if (!block.content)
         return preview
           ? `<div style="padding: 16px 0; text-align: ${block.props.align || "center"}; color: #999;">[ Image placeholder ]</div>`
           : ""
-      return `<div style="padding: 8px 0; text-align: ${escapeHtmlAttribute(block.props.align || "center")};"><img src="${escapeHtmlAttribute(block.content)}" alt="${escapeHtmlAttribute(block.props.alt || "")}" style="max-width: ${escapeHtmlAttribute(block.props.width || "100%")}; height: auto;" /></div>`
+      const uploaded = parseDataUrl(block.content)
+      const src = !preview && uploaded ? `cid:${imageContentId(block.id)}` : block.content
+      return `<div style="padding: 8px 0; text-align: ${escapeHtmlAttribute(block.props.align || "center")};"><img src="${escapeHtmlAttribute(src)}" alt="${escapeHtmlAttribute(block.props.alt || "")}" style="max-width: ${escapeHtmlAttribute(block.props.width || "100%")}; height: auto;" /></div>`
+    }
     case "button":
       return `<div style="padding: 16px 0; text-align: ${escapeHtmlAttribute(block.props.align || "center")};"><a href="${escapeHtmlAttribute(block.props.href || "#")}" style="display: inline-block; padding: 12px 28px; background-color: ${escapeHtmlAttribute(block.props.bgColor || "#3b82f6")}; color: ${escapeHtmlAttribute(block.props.textColor || "#ffffff")}; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">${block.content}</a></div>`
     case "divider":
       return `<hr style="border: none; border-top: ${block.props.thickness || "1"}px solid ${block.props.color || "#e5e7eb"}; margin: 16px 0;" />`
     case "html":
       return sanitizeEmailHtml(block.content)
+    case "attachment":
+      return ""
   }
 }
 

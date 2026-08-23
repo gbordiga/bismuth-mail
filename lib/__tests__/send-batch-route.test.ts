@@ -119,6 +119,50 @@ describe("POST /api/smtp/send-batch", () => {
     expect(data.results).toEqual([{ email: "alice@example.com", status: "sent", attempts: 1 }])
   })
 
+  it("forwards CID images and file attachments on send", async () => {
+    sendMailMock.mockResolvedValue({ accepted: ["alice@example.com"] })
+    const body = buildValidBody()
+    body.blocks = [
+      {
+        id: "hero",
+        type: "image",
+        content:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        props: { filename: "logo.png" },
+      },
+      {
+        id: "doc",
+        type: "attachment",
+        content: "data:application/pdf;base64,JVBERi0=",
+        props: { filename: "brief.pdf", mimeType: "application/pdf" },
+      },
+    ]
+
+    const res = await POST(buildRequest(body))
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.success).toBe(true)
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: expect.stringContaining('src="cid:img-hero"'),
+        attachments: [
+          expect.objectContaining({
+            filename: "logo.png",
+            encoding: "base64",
+            contentType: "image/png",
+            cid: "img-hero",
+          }),
+          expect.objectContaining({
+            filename: "brief.pdf",
+            encoding: "base64",
+            contentType: "application/pdf",
+          }),
+        ],
+      }),
+    )
+  })
+
   it("retries transient SMTP errors and succeeds on second attempt", async () => {
     const transientError = Object.assign(new Error("SMTP timeout"), { code: "ETIMEDOUT" })
     sendMailMock.mockRejectedValueOnce(transientError).mockResolvedValueOnce({ accepted: ["alice@example.com"] })

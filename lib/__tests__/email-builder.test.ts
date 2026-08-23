@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest"
-import { blockToHtml, buildFullHtml, type EditorBlock } from "@/lib/email-builder"
+import { blockToHtml, buildFullHtml, sanitizeEditorHtml, type EditorBlock } from "@/lib/email-builder"
+
+const TINY_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
 function block(overrides: Partial<EditorBlock> & { type: EditorBlock["type"] }): EditorBlock {
   return { id: "1", content: "", props: {}, ...overrides }
@@ -10,6 +13,25 @@ describe("blockToHtml", () => {
     const html = blockToHtml(block({ type: "text", content: "Hello world" }))
     expect(html).toContain("Hello world")
     expect(html).toMatch(/<div.*>Hello world<\/div>/)
+  })
+
+  it("omits empty and placeholder text blocks", () => {
+    expect(blockToHtml(block({ type: "text", content: "" }))).toBe("")
+    expect(blockToHtml(block({ type: "text", content: "<p>Write your text here...</p>" }))).toBe("")
+    expect(blockToHtml(block({ type: "text", content: "<p><br></p>" }))).toBe("")
+  })
+
+  it("keeps tables and inline images in text blocks", () => {
+    const html = blockToHtml(
+      block({
+        type: "text",
+        content: `<table border="1" style="width:100%"><tr><td><img src="${TINY_PNG}" alt="dot" width="1" /></td></tr></table>`,
+      }),
+    )
+    expect(html).toContain("<table")
+    expect(html).toContain("data:image/png;base64")
+    expect(html).toContain('alt="dot"')
+    expect(html).toContain("width:100%")
   })
 
   it("renders an image block with src and alt", () => {
@@ -54,6 +76,23 @@ describe("blockToHtml", () => {
   it("returns placeholder for image without src in preview mode", () => {
     const html = blockToHtml(block({ type: "image" }), true)
     expect(html).toContain("Image placeholder")
+  })
+
+  it("keeps uploaded images as data URLs in preview and uses CID when sending", () => {
+    const uploaded = block({ id: "hero", type: "image", content: TINY_PNG, props: { alt: "Logo" } })
+    expect(blockToHtml(uploaded, true)).toContain(TINY_PNG)
+    expect(blockToHtml(uploaded, false)).toContain('src="cid:img-hero"')
+    expect(blockToHtml(uploaded, false)).not.toContain("data:image/png")
+  })
+
+  it("does not render attachment files in the email body", () => {
+    const file = block({
+      type: "attachment",
+      content: "data:application/pdf;base64,JVBERi0=",
+      props: { filename: "brief.pdf", size: "1024" },
+    })
+    expect(blockToHtml(file, true)).toBe("")
+    expect(blockToHtml(file, false)).toBe("")
   })
 
   it("renders a button block with href and colors", () => {
@@ -147,5 +186,30 @@ describe("buildFullHtml", () => {
     const html = buildFullHtml(withEmpty, "", "mailto:unsub@test.com", false)
     expect(html).toContain("Visible")
     expect(html).not.toContain("<img ")
+  })
+})
+
+describe("sanitizeEditorHtml", () => {
+  it("preserves tables, styles, and base64 images", () => {
+    const html = sanitizeEditorHtml(
+      `<p>Hi</p><table cellpadding="4" style="width:100%"><tr><td>A</td><td><img src="${TINY_PNG}" alt="dot" /></td></tr></table>`,
+    )
+    expect(html).toContain("<table")
+    expect(html).toContain("cellpadding")
+    expect(html).toContain("width:100%")
+    expect(html).toContain("data:image/png;base64")
+    expect(html).toContain('alt="dot"')
+    expect(html).toContain(">A</td>")
+  })
+
+  it("still strips scripts and event handlers", () => {
+    const html = sanitizeEditorHtml(
+      `<p onclick="alert(1)">Safe</p><img src="${TINY_PNG}" onerror="alert(1)" alt="dot" /><script>alert(1)</script>`,
+    )
+    expect(html).toContain("Safe")
+    expect(html).toContain("data:image/png;base64")
+    expect(html).not.toContain("onclick")
+    expect(html).not.toContain("onerror")
+    expect(html).not.toContain("<script")
   })
 })

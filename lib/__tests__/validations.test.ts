@@ -72,6 +72,21 @@ describe("smtpSendSchema", () => {
   it("rejects invalid replyTo", () => {
     expect(smtpSendSchema.safeParse({ ...valid, replyTo: "bad" }).success).toBe(false)
   })
+
+  it("accepts optional base64 attachments", () => {
+    const result = smtpSendSchema.safeParse({
+      ...valid,
+      attachments: [
+        {
+          filename: "brief.pdf",
+          content: "JVBERi0=",
+          encoding: "base64",
+          contentType: "application/pdf",
+        },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
 })
 
 describe("smtpSendBatchSchema", () => {
@@ -134,5 +149,20 @@ describe("smtpSendBatchSchema", () => {
 
   it("rejects maxRetries above 5", () => {
     expect(smtpSendBatchSchema.safeParse({ ...valid, maxRetries: 10 }).success).toBe(false)
+  })
+
+  it("accepts attachment blocks with large base64 content", () => {
+    const result = smtpSendBatchSchema.safeParse({
+      ...valid,
+      blocks: [
+        {
+          id: "a1",
+          type: "attachment" as const,
+          content: `data:application/pdf;base64,${"A".repeat(60_000)}`,
+          props: { filename: "brief.pdf", mimeType: "application/pdf", size: "45000" },
+        },
+      ],
+    })
+    expect(result.success).toBe(true)
   })
 })

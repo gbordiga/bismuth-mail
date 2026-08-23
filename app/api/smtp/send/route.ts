@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     if (!parsed.success) {
       return smtpValidationError(parsed.error.issues)
     }
-    const { smtp, from, replyTo, to, subject, html, headers } = parsed.data
+    const { smtp, from, replyTo, to, subject, html, headers, attachments } = parsed.data
 
     const safeName = from.name.replace(/["\\\r\n]/g, "")
 
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
       html,
       text: htmlToPlainText(html),
       headers,
+      attachments,
     })
 
     return smtpSuccessResponse()
