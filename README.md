@@ -15,7 +15,7 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 - **SMTP Configuration** — Add and manage multiple SMTP servers with connection testing, tunable delay, max connections, and duplicate
 - **Sender Profiles** — Create sender identities with custom signatures and reply-to addresses, including duplicate
 - **Email Lists** — Organize contacts into lists with custom fields, CSV import/export (including unsubscribe flags), duplicate, search, unsubscribe toggles, and a local suppression list
-- **Block Editor** — Compose emails using text, image, button, divider, and raw HTML blocks, with dark-mode editing and campaign search
+- **Block Editor** — Compose emails using text, image (URL or upload), button, divider, and raw HTML blocks, plus campaign file attachments, with dark-mode editing and campaign search
 - **Merge Fields** — Use `{{field}}` placeholders in subject and body, resolved per-contact from list custom fields
 - **Campaign Sending** — Send campaigns with live progress, resume, retry-failed, campaign search, send-log search, filtered log export, pre-send checks, and test emails
 - **Deliverability basics** — `List-Unsubscribe` mailto header, multipart text/plain, sanitized HTML blocks

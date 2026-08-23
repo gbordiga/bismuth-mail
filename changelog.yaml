@@ -1,4 +1,32 @@
 versions:
+  - version: 0.4.3
+    date: 2026-08-23
+    changes:
+      - type: changed
+        items:
+          - Campaign editor is a single compose window with From, To, and Subject, Gmail-style chips for lists and attachments, and less block chrome
+          - Campaign To shows only chosen lists, added through an explicit picker, with recipient counts
+          - Text-block Field, move, and delete controls sit in the formatting toolbar instead of floating over it
+      - type: fixed
+        items:
+          - Leaving the campaign editor now keeps valid edits instead of discarding them on Back or sidebar navigation
+          - Campaigns no longer shows two vertical scrollbars from the page shell, table, and text editor
+          - Placeholder copy in empty text blocks is a hint only and is not saved or sent
+          - The changelog modal no longer fails when a note starts with a reserved YAML character
+
+  - version: 0.4.2
+    date: 2026-08-23
+    changes:
+      - type: added
+        items:
+          - Image blocks can upload a local JPEG, PNG, GIF, or WebP file in addition to a remote URL
+          - Campaign attachments add files to the outgoing message, including test emails and campaign sends
+          - Uploaded images are sent as CID inline parts so mail clients do not have to fetch a public URL
+      - type: changed
+        items:
+          - Attachments live in a campaign file list instead of a movable body block, so their position no longer looks like content
+          - Campaign editor settings sit in one compact panel, with tighter spacing and a sticky sidebar on wide screens
+
   - version: 0.4.1
     date: 2026-08-23
     changes:
@@ -14,8 +42,10 @@ versions:
           - Confirm send stays disabled until sender, SMTP, lists, recipients, and subject are ready
       - type: fixed
         items:
+          - Setup guide checkmarks update as soon as IndexedDB data changes, without a page refresh
           - Filtered send logs no longer export every row, and empty filter results show an explicit empty state
           - Test emails no longer advertise one-click `List-Unsubscribe-Post` without an HTTPS endpoint
+          - Switching the text editor between visual and HTML no longer strips tables, inline styles, or base64 images
 
   - version: 0.4.0
     date: 2026-08-23
@@ -47,7 +77,7 @@ versions:
         items:
           - Contact unsubscribe toggle and a browser-local global suppression list that is skipped on every send
           - CSV export for contacts and campaign send logs
-          - `List-Unsubscribe` mailto header, multipart text/plain bodies, and sanitized raw HTML blocks on send
+          - "`List-Unsubscribe` mailto header, multipart text/plain bodies, and sanitized raw HTML blocks on send"
           - Campaign status `sent_with_errors`, retry-failed, send remaining, and a send-log summary with pagination
           - Preview with a real contact from the target lists
           - First-run onboarding guide that stays IndexedDB-only
