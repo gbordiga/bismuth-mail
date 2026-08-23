@@ -90,7 +90,10 @@ export function BackupSection() {
           toast.error("Invalid backup file format")
           return
         }
-        setImportSummary(data)
+        setImportSummary({
+          ...data,
+          payload: prepareRestorePayload(data.payload),
+        })
         setConfirmOpen(true)
       } catch {
         toast.error("Failed to parse backup file")
@@ -133,8 +136,8 @@ export function BackupSection() {
         }
       })
 
-      toast.success("Backup imported successfully! Reload the page to see all data.")
-      setImportSummary(null)
+      toast.success("Backup imported successfully. Reloading…")
+      window.location.reload()
     } catch (err) {
       try {
         await db.transaction("rw", tables, async () => {

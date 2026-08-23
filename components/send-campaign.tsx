@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Send, Eye, AlertTriangle, CheckCircle2, XCircle, Clock, Loader2, Mail, ChevronDown, Zap, Wrench, RotateCcw, Download } from "lucide-react"
+import { Send, Eye, AlertTriangle, CheckCircle2, XCircle, Clock, Loader2, Mail, ChevronDown, Zap, Wrench, RotateCcw, Download, Search } from "lucide-react"
 import { toast } from "sonner"
 import { useSending } from "@/lib/sending-context"
 import {
@@ -33,6 +33,7 @@ import {
 } from "@/lib/repositories/campaign-repository"
 import { campaignStatusLabel, summarizeSendLogs } from "@/lib/send-engine"
 import { buildCampaignPreviewHtml, buildCampaignPreviewSubject, buildUnsubscribeMailto, parseCampaignBlocks } from "@/lib/preview"
+import { filterCampaigns, filterSendLogs, isSendReady } from "@/lib/operator"
 
 interface ErrorDiagnostic {
   category: string
@@ -113,6 +114,7 @@ export function SendCampaignSection() {
   const [previewSubject, setPreviewSubject] = useState("")
   const [logFilter, setLogFilter] = useState<"all" | "sent" | "failed">("all")
   const [logQuery, setLogQuery] = useState("")
+  const [campaignQuery, setCampaignQuery] = useState("")
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false)
 
   const LAST_CAMPAIGN_KEY = "bismuth-last-campaign-id"
@@ -257,7 +259,6 @@ export function SendCampaignSection() {
           html,
           headers: {
             "List-Unsubscribe": `<${unsubMailto}>`,
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
           },
         }),
       })
@@ -291,9 +292,13 @@ export function SendCampaignSection() {
 
   function handleExportLogs() {
     if (!selectedNl) return
+    if (filteredLogs.length === 0) {
+      toast.info("No send log rows match the current search and filter")
+      return
+    }
     downloadCsv(`${selectedNl.name.replace(/\s+/g, "-").toLowerCase()}-send-log.csv`, [
       ["email", "name", "status", "attempt", "error", "sentAt"],
-      ...sendLogs.map((log) => [
+      ...filteredLogs.map((log) => [
         log.contactEmail,
         log.contactName,
         log.status,
@@ -302,7 +307,7 @@ export function SendCampaignSection() {
         log.sentAt ? new Date(log.sentAt).toISOString() : "",
       ]),
     ])
-    toast.success(`Exported ${sendLogs.length} send log rows`)
+    toast.success(`Exported ${filteredLogs.length} send log rows`)
   }
 
   async function handleResetToDraft() {
@@ -314,17 +319,8 @@ export function SendCampaignSection() {
     load()
   }
 
-  const filteredLogs = sendLogs.filter((log) => {
-    if (logFilter === "sent" && log.status !== "sent") return false
-    if (logFilter === "failed" && log.status !== "failed") return false
-    if (!logQuery.trim()) return true
-    const q = logQuery.trim().toLowerCase()
-    return (
-      log.contactEmail.toLowerCase().includes(q) ||
-      log.contactName.toLowerCase().includes(q) ||
-      (log.error ?? "").toLowerCase().includes(q)
-    )
-  })
+  const filteredLogs = filterSendLogs(sendLogs, logFilter, logQuery)
+  const visibleNewsletters = filterCampaigns(newsletters, campaignQuery, selectedNlId)
 
   const senderReady = Boolean(selectedNl?.senderId)
   const listsReady = (selectedNl?.listIds.length ?? 0) > 0
@@ -333,6 +329,7 @@ export function SendCampaignSection() {
   const smtpReady = Boolean(
     selectedNl && senders.find((s) => s.id === selectedNl.senderId)?.smtpConfigId,
   )
+  const checklistReady = isSendReady({ senderReady, smtpReady, listsReady, hasRecipients, subjectReady })
 
   const progressPct =
     sendProgress.total > 0 ? ((sendProgress.sent + sendProgress.failed) / sendProgress.total) * 100 : 0
@@ -351,6 +348,18 @@ export function SendCampaignSection() {
           <div className="grid gap-4">
             <div className="grid gap-2">
               <Label>Select Campaign</Label>
+              {newsletters.length > 1 && (
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+                  <Input
+                    value={campaignQuery}
+                    onChange={(e) => setCampaignQuery(e.target.value)}
+                    placeholder="Search campaigns by name or subject"
+                    className="pl-8"
+                    aria-label="Search campaigns"
+                  />
+                </div>
+              )}
               <Select
                 value={selectedNlId ? String(selectedNlId) : ""}
                 onValueChange={(v) => setSelectedNlId(parseInt(v))}
@@ -359,7 +368,7 @@ export function SendCampaignSection() {
                   <SelectValue placeholder="Choose a campaign..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {newsletters.map((nl) => (
+                  {visibleNewsletters.map((nl) => (
                     <SelectItem key={nl.id} value={String(nl.id)}>
                       <div className="flex items-center gap-2">
                         <span>{nl.name}</span>
@@ -649,12 +658,17 @@ export function SendCampaignSection() {
                     <SelectItem value="failed">Failed</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button variant="outline" size="sm" onClick={handleExportLogs}>
+                <Button variant="outline" size="sm" onClick={handleExportLogs} disabled={filteredLogs.length === 0}>
                   <Download className="mr-2 size-4" />
                   Export CSV
                 </Button>
               </div>
             </div>
+            {filteredLogs.length === 0 ? (
+              <p className="px-5 py-8 text-center text-sm text-muted-foreground">
+                No send log rows match the current search and filter.
+              </p>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -698,6 +712,7 @@ export function SendCampaignSection() {
                 ))}
               </TableBody>
             </Table>
+            )}
             {filteredLogs.length > LOG_PAGE_SIZE && (
               <div className="flex items-center justify-between border-t px-5 py-3 text-sm">
                 <span className="text-muted-foreground">
@@ -755,7 +770,7 @@ export function SendCampaignSection() {
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmSend}>
+            <Button onClick={handleConfirmSend} disabled={!checklistReady}>
               <Send className="mr-2 size-4" />
               Confirm Send
             </Button>

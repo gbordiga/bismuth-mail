@@ -26,9 +26,10 @@ interface SetupProgress {
 export function OnboardingGuide() {
   const [progress, setProgress] = useState<SetupProgress | null>(null)
   const [dismissed, setDismissed] = useState(true)
+  const [forced, setForced] = useState(false)
 
-  const load = useCallback(async () => {
-    if (typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY) === "1") {
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    if (!opts?.force && typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY) === "1") {
       setDismissed(true)
       return
     }
@@ -55,8 +56,9 @@ export function OnboardingGuide() {
     void load()
     const reopen = () => {
       window.localStorage.removeItem(STORAGE_KEY)
+      setForced(true)
       setDismissed(false)
-      void load()
+      void load({ force: true })
     }
     window.addEventListener(REOPEN_EVENT, reopen)
     return () => window.removeEventListener(REOPEN_EVENT, reopen)
@@ -72,16 +74,19 @@ export function OnboardingGuide() {
     { key: "send", done: progress.send, href: "/send", label: "Send your first campaign" },
   ] as const
 
-  if (steps.every((step) => step.done)) return null
+  const allDone = steps.every((step) => step.done)
+  if (allDone && !forced) return null
 
   return (
     <Card className="mb-4">
       <CardContent className="flex flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-medium">Get started</p>
+            <p className="text-sm font-medium">{allDone ? "Setup complete" : "Get started"}</p>
             <p className="text-xs text-muted-foreground">
-              Everything stays in this browser. Complete these steps to send your first campaign.
+              {allDone
+                ? "All setup steps are done. Dismiss this guide anytime — it stays in this browser."
+                : "Everything stays in this browser. Complete these steps to send your first campaign."}
             </p>
           </div>
           <Button
@@ -90,6 +95,7 @@ export function OnboardingGuide() {
             aria-label="Dismiss setup guide"
             onClick={() => {
               window.localStorage.setItem(STORAGE_KEY, "1")
+              setForced(false)
               setDismissed(true)
             }}
           >
