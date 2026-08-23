@@ -4,6 +4,7 @@ import {
   computeMaxBatchSize,
   resolveCompletedCampaignStatus,
   selectContactsToSend,
+  sendLogWritePayload,
   summarizeSendLogs,
 } from "@/lib/send-engine"
 
@@ -52,6 +53,30 @@ describe("resolveCompletedCampaignStatus", () => {
   it("uses sent_with_errors when any delivery failed", () => {
     expect(resolveCompletedCampaignStatus(0)).toBe("sent")
     expect(resolveCompletedCampaignStatus(2)).toBe("sent_with_errors")
+  })
+
+  it("keeps sending when recipients were never attempted", () => {
+    expect(resolveCompletedCampaignStatus(0, 3)).toBe("sending")
+    expect(resolveCompletedCampaignStatus(2, 1)).toBe("sending")
+  })
+})
+
+describe("sendLogWritePayload", () => {
+  it("clears a previous error when a later attempt succeeds", () => {
+    expect(
+      sendLogWritePayload({
+        newsletterId: 1,
+        contactEmail: "Ada@Example.com",
+        contactName: "Ada",
+        status: "sent",
+        attempt: 2,
+        sentAt: new Date("2026-08-23T00:00:00.000Z"),
+      }),
+    ).toMatchObject({
+      contactEmail: "ada@example.com",
+      status: "sent",
+      error: "",
+    })
   })
 })
 

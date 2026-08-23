@@ -179,12 +179,24 @@ export function SendingProvider({ children }: { children: ReactNode }) {
     setSendProgress({ total: allContacts.length, sent: sentCount, failed: failedCount })
 
     if (toSend.length === 0) {
-      const status = resolveCompletedCampaignStatus(failedCount)
-      await db.newsletters.update(newsletterId, { status, sentAt: new Date() })
+      const remainingCount = Math.max(0, allContacts.length - sentCount - failedCount)
+      const status = resolveCompletedCampaignStatus(failedCount, remainingCount)
+      await db.newsletters.update(newsletterId, {
+        status,
+        ...(status === "sending" ? {} : { sentAt: new Date() }),
+      })
       setSending(false)
       setPhase("idle")
       setActiveNewsletterId(null)
-      toast.success(failedCount > 0 ? "No remaining failed recipients to retry." : "All emails were already sent.")
+      if (remainingCount > 0) {
+        toast.info(
+          options?.retryFailedOnly
+            ? `No failed recipients to retry. ${remainingCount} remaining have not been sent yet.`
+            : `No recipients left to send in this run. ${remainingCount} remaining.`,
+        )
+      } else {
+        toast.success(failedCount > 0 ? "No remaining failed recipients to retry." : "All emails were already sent.")
+      }
       return
     }
 
@@ -260,7 +272,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
               contactName,
               status: r.status,
               attempt: r.attempts,
-              error: r.error,
+              error: r.error ?? "",
               sentAt: new Date(),
             })
             logMap.set(normalizeEmail(r.email), {
@@ -269,7 +281,7 @@ export function SendingProvider({ children }: { children: ReactNode }) {
               contactName,
               status: r.status,
               attempt: r.attempts,
-              error: r.error,
+              error: r.error ?? "",
               sentAt: new Date(),
             })
           }
@@ -328,25 +340,38 @@ export function SendingProvider({ children }: { children: ReactNode }) {
 
     setPhase("finishing")
 
+    const remainingCount = Math.max(0, allContacts.length - sentCount - failedCount)
+
     if (abortRef.current) {
       await db.newsletters.update(newsletterId, { status: "sending" })
       setSending(false)
       setPhase("idle")
       setActiveNewsletterId(null)
       toast.info(
-        `Campaign paused. ${sentCount} delivered, ${failedCount} failed, ${allContacts.length - sentCount - failedCount} remaining. You can resume later.`,
+        `Campaign paused. ${sentCount} delivered, ${failedCount} failed, ${remainingCount} remaining. You can resume later.`,
       )
     } else {
-      const status = resolveCompletedCampaignStatus(failedCount)
-      await db.newsletters.update(newsletterId, { status, sentAt: new Date() })
+      const status = resolveCompletedCampaignStatus(failedCount, remainingCount)
+      await db.newsletters.update(newsletterId, {
+        status,
+        ...(status === "sending" ? {} : { sentAt: new Date() }),
+      })
       setSending(false)
       setPhase("idle")
       setActiveNewsletterId(null)
-      toast.success(
-        failedCount > 0
-          ? `Campaign finished with errors. ${sentCount} delivered, ${failedCount} failed.`
-          : `Campaign sent! ${sentCount} delivered.`,
-      )
+      if (remainingCount > 0) {
+        toast.info(
+          options?.retryFailedOnly
+            ? `Retry finished. ${sentCount} delivered, ${failedCount} failed, ${remainingCount} remaining.`
+            : `Send finished. ${sentCount} delivered, ${failedCount} failed, ${remainingCount} remaining.`,
+        )
+      } else {
+        toast.success(
+          failedCount > 0
+            ? `Campaign finished with errors. ${sentCount} delivered, ${failedCount} failed.`
+            : `Campaign sent! ${sentCount} delivered.`,
+        )
+      }
     }
   }, [sending])
 

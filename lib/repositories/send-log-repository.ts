@@ -1,14 +1,12 @@
 import { db, type SendLog } from "@/lib/db"
-import { normalizeEmail } from "@/lib/email"
+import { sendLogWritePayload } from "@/lib/send-engine"
 
 export async function upsertSendLog(log: Omit<SendLog, "id">): Promise<void> {
-  const contactEmail = normalizeEmail(log.contactEmail)
+  const payload = sendLogWritePayload(log)
   const existing = await db.sendLogs
     .where("[newsletterId+contactEmail]")
-    .equals([log.newsletterId, contactEmail])
+    .equals([log.newsletterId, payload.contactEmail])
     .first()
-
-  const payload = { ...log, contactEmail }
 
   if (existing?.id != null) {
     await db.sendLogs.update(existing.id, {

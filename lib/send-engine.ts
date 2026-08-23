@@ -30,8 +30,21 @@ export function summarizeSendLogs(logs: SendLog[]): { sent: number; failed: numb
   return { sent, failed, pending }
 }
 
-export function resolveCompletedCampaignStatus(failedCount: number): Extract<Newsletter["status"], "sent" | "sent_with_errors"> {
+export function resolveCompletedCampaignStatus(
+  failedCount: number,
+  remainingCount = 0,
+): Extract<Newsletter["status"], "sending" | "sent" | "sent_with_errors"> {
+  if (remainingCount > 0) return "sending"
   return failedCount > 0 ? "sent_with_errors" : "sent"
+}
+
+/** Always persist a defined error so a later success overwrites a previous failure. */
+export function sendLogWritePayload(log: Omit<SendLog, "id">): Omit<SendLog, "id"> {
+  return {
+    ...log,
+    contactEmail: normalizeEmail(log.contactEmail),
+    error: log.error ?? "",
+  }
 }
 
 export function campaignStatusLabel(status: Newsletter["status"]): string {

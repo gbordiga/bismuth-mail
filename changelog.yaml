@@ -13,6 +13,8 @@ versions:
           - Campaigns no longer shows two vertical scrollbars from the page shell, table, and text editor
           - Placeholder copy in empty text blocks is a hint only and is not saved or sent
           - The changelog modal no longer fails when a note starts with a reserved YAML character
+          - Retry failed no longer marks a campaign as finished while some recipients have never been sent
+          - A later successful send now clears the previous error from the send log and CSV export
 
   - version: 0.4.2
     date: 2026-08-23
