@@ -69,4 +69,14 @@ describe("selectContactsToSend", () => {
   it("selects only failed recipients for retry mode", () => {
     expect(selectContactsToSend(contacts, logs, "failed-only").map((item) => item.email)).toEqual(["fail@example.com"])
   })
+
+  it("treats mixed-case emails as the same recipient", () => {
+    const mixed = [contact("OK@example.com"), contact("Fail@example.com"), contact("new@example.com")]
+    const mixedLogs = [log("ok@example.com", "sent", 1), log("FAIL@example.com", "failed", 2)]
+    expect(selectContactsToSend(mixed, mixedLogs, "remaining").map((item) => item.email)).toEqual([
+      "Fail@example.com",
+      "new@example.com",
+    ])
+    expect(selectContactsToSend(mixed, mixedLogs, "failed-only").map((item) => item.email)).toEqual(["Fail@example.com"])
+  })
 })

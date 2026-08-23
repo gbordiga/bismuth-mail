@@ -24,3 +24,7 @@ export function buildCampaignPreviewHtml(args: {
   const html = buildFullHtml(args.blocks, args.signature, mailtoHref, true)
   return replaceMergeFields(html, contact)
 }
+
+export function buildCampaignPreviewSubject(subject: string, contact?: MergeContact): string {
+  return replaceMergeFields(subject, contact ?? SAMPLE_MERGE_CONTACT)
+}

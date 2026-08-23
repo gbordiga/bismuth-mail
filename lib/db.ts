@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from "dexie"
 
 // --- Types ---
-export const DB_SCHEMA_VERSION = 6
+export const DB_SCHEMA_VERSION = 7
 
 export interface SmtpConfig {
   id?: number
@@ -250,6 +250,53 @@ db.version(6)
         reason: "unsubscribed",
         createdAt: new Date(),
       })
+    }
+  })
+
+db.version(7)
+  .stores({
+    smtpConfigs: "++id, name, createdAt",
+    senders: "++id, name, email, smtpConfigId, createdAt",
+    emailLists: "++id, name, createdAt",
+    contacts: "++id, listId, email, subscribedAt, unsubscribed",
+    newsletters: "++id, name, status, createdAt",
+    sendLogs: "++id, newsletterId, [newsletterId+contactEmail], status",
+    suppressedEmails: "++id, &email, createdAt",
+  })
+  .upgrade(async (tx) => {
+    const logs = await tx.table("sendLogs").toArray()
+    const keep = new Map<string, { id: number; status: string }>()
+    const removeIds: number[] = []
+
+    for (const log of logs) {
+      const email = String(log.contactEmail ?? "").trim().toLowerCase()
+      const key = `${log.newsletterId}::${email}`
+      const prev = keep.get(key)
+      if (!prev) {
+        keep.set(key, { id: log.id, status: log.status })
+        continue
+      }
+      const preferCurrent =
+        (log.status === "sent" && prev.status !== "sent") ||
+        (log.status === prev.status && (log.id ?? 0) > prev.id)
+      if (preferCurrent) {
+        removeIds.push(prev.id)
+        keep.set(key, { id: log.id, status: log.status })
+      } else {
+        removeIds.push(log.id)
+      }
+    }
+
+    if (removeIds.length > 0) {
+      await tx.table("sendLogs").bulkDelete(removeIds)
+    }
+
+    const remaining = logs.filter((log) => !removeIds.includes(log.id))
+    for (const log of remaining) {
+      const email = String(log.contactEmail ?? "").trim().toLowerCase()
+      if (email && email !== log.contactEmail) {
+        await tx.table("sendLogs").update(log.id, { contactEmail: email })
+      }
     }
   })
 

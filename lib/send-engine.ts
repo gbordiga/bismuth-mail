@@ -1,4 +1,5 @@
 import type { Contact, Newsletter, SendLog } from "@/lib/db"
+import { normalizeEmail } from "@/lib/email"
 
 export function computeMaxBatchSize(maxConnections: number, delayMs: number): number {
   const TIME_BUDGET_MS = 240_000
@@ -55,14 +56,15 @@ export function selectContactsToSend(
 ): Contact[] {
   const latestByEmail = new Map<string, SendLog>()
   for (const log of logs) {
-    const prev = latestByEmail.get(log.contactEmail)
+    const email = normalizeEmail(log.contactEmail)
+    const prev = latestByEmail.get(email)
     if (!prev || (log.id ?? 0) > (prev.id ?? 0)) {
-      latestByEmail.set(log.contactEmail, log)
+      latestByEmail.set(email, { ...log, contactEmail: email })
     }
   }
 
   return contacts.filter((contact) => {
-    const log = latestByEmail.get(contact.email)
+    const log = latestByEmail.get(normalizeEmail(contact.email))
     if (mode === "failed-only") return log?.status === "failed"
     return log?.status !== "sent"
   })

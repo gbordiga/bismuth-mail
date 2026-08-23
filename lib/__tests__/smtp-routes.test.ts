@@ -75,6 +75,33 @@ describe("SMTP route contracts", () => {
     )
   })
 
+  it("forwards optional headers on the send endpoint", async () => {
+    sendMailMock.mockResolvedValueOnce({ accepted: ["to@example.com"] })
+
+    const res = await sendPost(
+      jsonRequest("http://localhost/api/smtp/send", {
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          auth: { user: "user", pass: "pass" },
+        },
+        from: { name: "Team", email: "team@example.com" },
+        to: "to@example.com",
+        subject: "Subject",
+        html: "<p>hello</p>",
+        headers: { "List-Unsubscribe": "<mailto:unsub@example.com>" },
+      }),
+    )
+
+    expect(res.status).toBe(200)
+    expect(sendMailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: { "List-Unsubscribe": "<mailto:unsub@example.com>" },
+      }),
+    )
+  })
+
   it("returns categorized SMTP errors for test endpoint", async () => {
     verifyMock.mockRejectedValueOnce(new Error("535 Authentication failed"))
     const res = await testPost(

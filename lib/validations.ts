@@ -26,6 +26,7 @@ export const smtpSendSchema = z.object({
   to: z.email(),
   subject: z.string().min(1).max(998),
   html: z.string().min(1).max(5_000_000),
+  headers: z.record(z.string(), z.string()).optional(),
 })
 
 const editorBlockSchema = z.object({

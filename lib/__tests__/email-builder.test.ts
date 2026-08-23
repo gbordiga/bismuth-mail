@@ -25,6 +25,28 @@ describe("blockToHtml", () => {
     expect(html).toContain("text-align: left")
   })
 
+  it("escapes quotes in image and button attributes", () => {
+    const image = blockToHtml(
+      block({
+        type: "image",
+        content: 'https://example.com/a.png" onerror="alert(1)',
+        props: { alt: 'Logo "mark"' },
+      }),
+    )
+    expect(image).toContain("https://example.com/a.png&quot; onerror=&quot;alert(1)")
+    expect(image).toContain("Logo &quot;mark&quot;")
+    expect(image).not.toContain('onerror="alert')
+
+    const button = blockToHtml(
+      block({
+        type: "button",
+        content: "Go",
+        props: { href: 'https://example.com/" onclick="alert(1)' },
+      }),
+    )
+    expect(button).toContain("https://example.com/&quot; onclick=&quot;alert(1)")
+  })
+
   it("returns empty string for image without src in non-preview mode", () => {
     expect(blockToHtml(block({ type: "image" }), false)).toBe("")
   })

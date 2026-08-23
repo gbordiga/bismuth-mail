@@ -2,6 +2,14 @@ import DOMPurify from "isomorphic-dompurify"
 
 export type BlockType = "text" | "image" | "button" | "divider" | "html"
 
+export function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+}
+
 export function sanitizeEmailHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     USE_PROFILES: { html: true },
@@ -26,9 +34,9 @@ export function blockToHtml(block: EditorBlock, preview = false): string {
         return preview
           ? `<div style="padding: 16px 0; text-align: ${block.props.align || "center"}; color: #999;">[ Image placeholder ]</div>`
           : ""
-      return `<div style="padding: 8px 0; text-align: ${block.props.align || "center"};"><img src="${block.content}" alt="${block.props.alt || ""}" style="max-width: ${block.props.width || "100%"}; height: auto;" /></div>`
+      return `<div style="padding: 8px 0; text-align: ${escapeHtmlAttribute(block.props.align || "center")};"><img src="${escapeHtmlAttribute(block.content)}" alt="${escapeHtmlAttribute(block.props.alt || "")}" style="max-width: ${escapeHtmlAttribute(block.props.width || "100%")}; height: auto;" /></div>`
     case "button":
-      return `<div style="padding: 16px 0; text-align: ${block.props.align || "center"};"><a href="${block.props.href || "#"}" style="display: inline-block; padding: 12px 28px; background-color: ${block.props.bgColor || "#3b82f6"}; color: ${block.props.textColor || "#ffffff"}; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">${block.content}</a></div>`
+      return `<div style="padding: 16px 0; text-align: ${escapeHtmlAttribute(block.props.align || "center")};"><a href="${escapeHtmlAttribute(block.props.href || "#")}" style="display: inline-block; padding: 12px 28px; background-color: ${escapeHtmlAttribute(block.props.bgColor || "#3b82f6")}; color: ${escapeHtmlAttribute(block.props.textColor || "#ffffff")}; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">${block.content}</a></div>`
     case "divider":
       return `<hr style="border: none; border-top: ${block.props.thickness || "1"}px solid ${block.props.color || "#e5e7eb"}; margin: 16px 0;" />`
     case "html":
@@ -70,7 +78,7 @@ export function buildFullHtml(
   </div>
   ${senderSig ? `<div style="padding: 16px 24px; border-top: 1px solid #e5e7eb;">${sanitizeEmailHtml(senderSig)}</div>` : ""}
   <div class="email-footer">
-    <p>To unsubscribe, <a href="${unsubscribeHref}">click here to send an unsubscribe request</a>.</p>
+    <p>To unsubscribe, <a href="${escapeHtmlAttribute(unsubscribeHref)}">click here to send an unsubscribe request</a>.</p>
   </div>
 </div>
 </body>

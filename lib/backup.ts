@@ -1,3 +1,5 @@
+import { normalizeEmail } from "@/lib/email"
+
 export interface BackupPayload {
   smtpConfigs: unknown[]
   senders: unknown[]
@@ -76,4 +78,75 @@ export function normalizeBackup(input: unknown): BackupData | null {
   }
 
   return null
+}
+
+function asRecords(value: unknown[]): Record<string, unknown>[] {
+  return value.filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+}
+
+function preferSentLog(current: Record<string, unknown>, previous: Record<string, unknown>): Record<string, unknown> {
+  if (current.status === "sent" && previous.status !== "sent") return current
+  const currentId = typeof current.id === "number" ? current.id : 0
+  const previousId = typeof previous.id === "number" ? previous.id : 0
+  return currentId >= previousId ? current : previous
+}
+
+function reviveDates(records: Record<string, unknown>[], fields: string[]): Record<string, unknown>[] {
+  return records.map((record) => {
+    const next = { ...record }
+    for (const field of fields) {
+      const value = next[field]
+      if (typeof value === "string" && value) {
+        const parsed = new Date(value)
+        if (!Number.isNaN(parsed.getTime())) next[field] = parsed
+      }
+    }
+    return next
+  })
+}
+
+export function prepareRestorePayload(payload: BackupPayload): BackupPayload {
+  const suppressedByEmail = new Map<string, Record<string, unknown>>()
+  for (const row of asRecords(payload.suppressedEmails)) {
+    const email = normalizeEmail(String(row.email ?? ""))
+    if (!email) continue
+    if (!suppressedByEmail.has(email)) {
+      suppressedByEmail.set(email, { ...row, email })
+    }
+  }
+
+  const contacts = asRecords(payload.contacts).map((contact) => {
+    const email = normalizeEmail(String(contact.email ?? ""))
+    const unsubscribed = Boolean(contact.unsubscribed) || suppressedByEmail.has(email)
+    if (unsubscribed && email) {
+      suppressedByEmail.set(email, suppressedByEmail.get(email) ?? {
+        email,
+        reason: "unsubscribed",
+        createdAt: new Date().toISOString(),
+      })
+    }
+    return { ...contact, email, unsubscribed }
+  })
+
+  const logsByKey = new Map<string, Record<string, unknown>>()
+  for (const log of asRecords(payload.sendLogs)) {
+    const email = normalizeEmail(String(log.contactEmail ?? ""))
+    const newsletterId = log.newsletterId
+    if (!email || newsletterId == null) continue
+    const key = `${String(newsletterId)}::${email}`
+    const normalized = { ...log, contactEmail: email }
+    const prev = logsByKey.get(key)
+    logsByKey.set(key, prev ? preferSentLog(normalized, prev) : normalized)
+  }
+
+  return {
+    ...payload,
+    smtpConfigs: reviveDates(asRecords(payload.smtpConfigs), ["createdAt"]),
+    senders: reviveDates(asRecords(payload.senders), ["createdAt"]),
+    emailLists: reviveDates(asRecords(payload.emailLists), ["createdAt"]),
+    contacts: reviveDates(contacts, ["subscribedAt"]),
+    newsletters: reviveDates(asRecords(payload.newsletters), ["createdAt", "sentAt"]),
+    sendLogs: reviveDates([...logsByKey.values()], ["sentAt"]),
+    suppressedEmails: reviveDates([...suppressedByEmail.values()], ["createdAt"]),
+  }
 }
