@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react"
 import { DB_SCHEMA_VERSION, db } from "@/lib/db"
+import { normalizeBackup, type BackupData } from "@/lib/backup"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,89 +18,6 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 
-interface BackupPayload {
-  smtpConfigs: unknown[]
-  senders: unknown[]
-  emailLists: unknown[]
-  contacts: unknown[]
-  newsletters: unknown[]
-  sendLogs: unknown[]
-}
-
-interface BackupDataV2 {
-  version: 2
-  exportedAt: string
-  appVersion: string
-  dbSchemaVersion: number
-  payload: BackupPayload
-}
-
-interface LegacyBackupDataV1 extends BackupPayload {
-  version: 1
-  exportedAt: string
-}
-
-type BackupData = BackupDataV2
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
-}
-
-function normalizeBackup(input: unknown): BackupData | null {
-  if (!isRecord(input) || typeof input.version !== "number" || typeof input.exportedAt !== "string") {
-    return null
-  }
-
-  if (input.version === 2 && isRecord(input.payload)) {
-    const payload = input.payload as Partial<BackupPayload>
-    if (
-      Array.isArray(payload.smtpConfigs) &&
-      Array.isArray(payload.senders) &&
-      Array.isArray(payload.emailLists) &&
-      Array.isArray(payload.contacts) &&
-      Array.isArray(payload.newsletters) &&
-      Array.isArray(payload.sendLogs)
-    ) {
-      return {
-        version: 2,
-        exportedAt: input.exportedAt,
-        appVersion: typeof input.appVersion === "string" ? input.appVersion : "unknown",
-        dbSchemaVersion: typeof input.dbSchemaVersion === "number" ? input.dbSchemaVersion : 0,
-        payload: payload as BackupPayload,
-      }
-    }
-  }
-
-  if (input.version === 1) {
-    const legacy = input as Partial<LegacyBackupDataV1>
-    if (
-      Array.isArray(legacy.smtpConfigs) &&
-      Array.isArray(legacy.senders) &&
-      Array.isArray(legacy.emailLists) &&
-      Array.isArray(legacy.contacts) &&
-      Array.isArray(legacy.newsletters) &&
-      Array.isArray(legacy.sendLogs)
-    ) {
-      return {
-        version: 2,
-        exportedAt: legacy.exportedAt ?? new Date(0).toISOString(),
-        appVersion: "legacy-v1",
-        dbSchemaVersion: 0,
-        payload: {
-          smtpConfigs: legacy.smtpConfigs,
-          senders: legacy.senders,
-          emailLists: legacy.emailLists,
-          contacts: legacy.contacts,
-          newsletters: legacy.newsletters,
-          sendLogs: legacy.sendLogs,
-        },
-      }
-    }
-  }
-
-  return null
-}
-
 export function BackupSection() {
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -110,13 +28,14 @@ export function BackupSection() {
   async function handleExport() {
     setExporting(true)
     try {
-      const [smtpConfigs, senders, emailLists, contacts, newsletters, sendLogs] = await Promise.all([
+      const [smtpConfigs, senders, emailLists, contacts, newsletters, sendLogs, suppressedEmails] = await Promise.all([
         db.smtpConfigs.toArray(),
         db.senders.toArray(),
         db.emailLists.toArray(),
         db.contacts.toArray(),
         db.newsletters.toArray(),
         db.sendLogs.toArray(),
+        db.suppressedEmails.toArray(),
       ])
 
       const backup: BackupData = {
@@ -131,6 +50,7 @@ export function BackupSection() {
           contacts,
           newsletters,
           sendLogs,
+          suppressedEmails,
         },
       }
 
@@ -177,7 +97,6 @@ export function BackupSection() {
       }
     }
     reader.readAsText(file)
-    // Reset input so same file can be re-selected
     e.target.value = ""
   }
 
@@ -189,7 +108,7 @@ export function BackupSection() {
     try {
       await db.transaction(
         "rw",
-        [db.smtpConfigs, db.senders, db.emailLists, db.contacts, db.newsletters, db.sendLogs],
+        [db.smtpConfigs, db.senders, db.emailLists, db.contacts, db.newsletters, db.sendLogs, db.suppressedEmails],
         async () => {
           await Promise.all([
             db.smtpConfigs.clear(),
@@ -198,15 +117,20 @@ export function BackupSection() {
             db.contacts.clear(),
             db.newsletters.clear(),
             db.sendLogs.clear(),
+            db.suppressedEmails.clear(),
           ])
 
-          // Preserve original IDs so foreign key references remain valid
           await db.smtpConfigs.bulkAdd(importSummary.payload.smtpConfigs as Parameters<typeof db.smtpConfigs.bulkAdd>[0])
           await db.senders.bulkAdd(importSummary.payload.senders as Parameters<typeof db.senders.bulkAdd>[0])
           await db.emailLists.bulkAdd(importSummary.payload.emailLists as Parameters<typeof db.emailLists.bulkAdd>[0])
           await db.contacts.bulkAdd(importSummary.payload.contacts as Parameters<typeof db.contacts.bulkAdd>[0])
           await db.newsletters.bulkAdd(importSummary.payload.newsletters as Parameters<typeof db.newsletters.bulkAdd>[0])
           await db.sendLogs.bulkAdd(importSummary.payload.sendLogs as Parameters<typeof db.sendLogs.bulkAdd>[0])
+          if (importSummary.payload.suppressedEmails.length > 0) {
+            await db.suppressedEmails.bulkAdd(
+              importSummary.payload.suppressedEmails as Parameters<typeof db.suppressedEmails.bulkAdd>[0],
+            )
+          }
         },
       )
 
@@ -225,13 +149,13 @@ export function BackupSection() {
         <div>
           <h2 className="section-title">Backup & Restore</h2>
           <p className="section-description">
-            Export or import all your data including SMTP configs, senders, lists, contacts, campaigns, and send logs
+            Export or import all your data including SMTP configs, senders, lists, contacts, campaigns, send logs, and
+            suppressed emails
           </p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Export Card */}
         <Card>
           <CardContent className="flex flex-col items-center gap-4 p-6">
             <div className="flex size-14 items-center justify-center rounded-full bg-primary/10">
@@ -259,7 +183,6 @@ export function BackupSection() {
           </CardContent>
         </Card>
 
-        {/* Import Card */}
         <Card>
           <CardContent className="flex flex-col items-center gap-4 p-6">
             <div className="flex size-14 items-center justify-center rounded-full bg-warning/10">
@@ -305,11 +228,11 @@ export function BackupSection() {
             <Badge variant="outline">Contacts</Badge>
             <Badge variant="outline">Campaigns</Badge>
             <Badge variant="outline">Send Logs</Badge>
+            <Badge variant="outline">Suppressed emails</Badge>
           </div>
         </AlertDescription>
       </Alert>
 
-      {/* Confirm Import Dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
@@ -350,6 +273,10 @@ export function BackupSection() {
                 <div className="flex items-center justify-between rounded bg-card px-3 py-1.5">
                   <span className="text-muted-foreground">Send Logs</span>
                   <Badge variant="secondary">{importSummary.payload.sendLogs.length}</Badge>
+                </div>
+                <div className="flex items-center justify-between rounded bg-card px-3 py-1.5">
+                  <span className="text-muted-foreground">Suppressed</span>
+                  <Badge variant="secondary">{importSummary.payload.suppressedEmails.length}</Badge>
                 </div>
               </div>
               <div className="mt-2 space-y-1 text-xs text-muted-foreground">

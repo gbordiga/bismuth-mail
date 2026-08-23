@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { db, type Newsletter, type Sender, type EmailList } from "@/lib/db"
+import { useDbQuery } from "@/hooks/use-db-table"
+import { db, type Newsletter, type Sender, type EmailList, type Contact } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -49,7 +50,10 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { RichTextEditor } from "@/components/rich-text-editor"
 
-import { type BlockType, type EditorBlock, blockToHtml, buildFullHtml } from "@/lib/email-builder"
+import { type BlockType, type EditorBlock, blockToHtml } from "@/lib/email-builder"
+import { buildCampaignPreviewHtml } from "@/lib/preview"
+import { campaignStatusLabel } from "@/lib/send-engine"
+import { getUniqueActiveContacts } from "@/lib/repositories/campaign-repository"
 
 function generateId() {
   return Math.random().toString(36).substring(2, 9)
@@ -403,9 +407,6 @@ function BlockEditor({
 }
 
 export function NewsletterSection() {
-  const [newsletters, setNewsletters] = useState<Newsletter[]>([])
-  const [senders, setSenders] = useState<Sender[]>([])
-  const [lists, setLists] = useState<EmailList[]>([])
   const [editing, setEditing] = useState<Newsletter | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -417,23 +418,31 @@ export function NewsletterSection() {
   const [selectedListIds, setSelectedListIds] = useState<number[]>([])
   const [blocks, setBlocks] = useState<EditorBlock[]>([])
   const [previewHtml, setPreviewHtml] = useState("")
+  const [previewContacts, setPreviewContacts] = useState<Contact[]>([])
+  const [previewContactEmail, setPreviewContactEmail] = useState("")
   const previewRef = useRef<HTMLIFrameElement>(null)
 
-  const load = useCallback(async () => {
+  const loadCampaigns = useCallback(async () => {
     const [allNl, allSenders, allLists] = await Promise.all([
       db.newsletters.orderBy("createdAt").reverse().toArray(),
       db.senders.toArray(),
       db.emailLists.toArray(),
     ])
-    setNewsletters(allNl)
-    setSenders(allSenders)
-    setLists(allLists)
+    return { newsletters: allNl, senders: allSenders, lists: allLists }
   }, [])
 
+  const { data, reload, error } = useDbQuery(loadCampaigns, {
+    newsletters: [] as Newsletter[],
+    senders: [] as Sender[],
+    lists: [] as EmailList[],
+  })
+  const newsletters = data.newsletters
+  const senders = data.senders
+  const lists = data.lists
+
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load from IndexedDB
-    void load()
-  }, [load])
+    if (error) toast.error(`Could not load campaigns: ${error}`)
+  }, [error])
 
   const mergeFields = (() => {
     const base = ["email", "firstName", "lastName"]
@@ -499,7 +508,7 @@ export function NewsletterSection() {
       toast.success("Campaign created")
     }
     setDialogOpen(false)
-    load()
+    void reload()
   }
 
   async function handleDelete(id: number) {
@@ -513,7 +522,7 @@ export function NewsletterSection() {
     await db.sendLogs.where("newsletterId").equals(id).delete()
     await db.newsletters.delete(id)
     toast.success("Campaign deleted")
-    load()
+    void reload()
   }
 
   async function handleDuplicate(nl: Newsletter) {
@@ -526,32 +535,56 @@ export function NewsletterSection() {
       createdAt: new Date(),
     })
     toast.success("Campaign duplicated")
-    load()
+    void reload()
   }
 
-  function showPreview() {
+  async function showPreview() {
     const sender = senders.find((s) => s.id === senderId)
-    const unsubEmail = sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com"
-    const mailtoHref = `mailto:${unsubEmail}?subject=UNSUBSCRIBE&body=Please%20unsubscribe%20me%20from%20this%20mailing%20list.`
-    const html = buildFullHtml(blocks, sender?.signature || "", mailtoHref, true)
-    setPreviewHtml(html)
+    const contacts = selectedListIds.length > 0 ? await getUniqueActiveContacts(selectedListIds) : []
+    const selected = contacts.find((contact) => contact.email === previewContactEmail) ?? contacts[0]
+    setPreviewContacts(contacts)
+    setPreviewContactEmail(selected?.email ?? "")
+    setPreviewHtml(
+      buildCampaignPreviewHtml({
+        blocks,
+        signature: sender?.signature || "",
+        unsubscribeEmail: sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com",
+        contact: selected,
+      }),
+    )
     setPreviewOpen(true)
+  }
+
+  function updatePreviewContact(email: string) {
+    const sender = senders.find((s) => s.id === senderId)
+    const selected = previewContacts.find((contact) => contact.email === email)
+    setPreviewContactEmail(email)
+    setPreviewHtml(
+      buildCampaignPreviewHtml({
+        blocks,
+        signature: sender?.signature || "",
+        unsubscribeEmail: sender?.unsubscribeEmail || sender?.email || "unsubscribe@example.com",
+        contact: selected,
+      }),
+    )
   }
 
   function toggleListSelection(listId: number) {
     setSelectedListIds((prev) => (prev.includes(listId) ? prev.filter((id) => id !== listId) : [...prev, listId]))
   }
 
-  function getStatusBadge(status: string) {
+  function getStatusBadge(status: Newsletter["status"]) {
     switch (status) {
       case "draft":
-        return <Badge variant="secondary">Draft</Badge>
+        return <Badge variant="secondary">{campaignStatusLabel(status)}</Badge>
       case "sending":
-        return <Badge className="bg-warning text-warning-foreground">Sending</Badge>
+        return <Badge className="bg-warning text-warning-foreground">{campaignStatusLabel(status)}</Badge>
       case "sent":
-        return <Badge className="bg-success text-success-foreground">Sent</Badge>
+        return <Badge className="bg-success text-success-foreground">{campaignStatusLabel(status)}</Badge>
+      case "sent_with_errors":
+        return <Badge className="bg-warning text-warning-foreground">{campaignStatusLabel(status)}</Badge>
       default:
-        return <Badge variant="outline">{status}</Badge>
+        return <Badge variant="outline">{campaignStatusLabel(status)}</Badge>
     }
   }
 
@@ -561,6 +594,22 @@ export function NewsletterSection() {
         <DialogHeader>
           <DialogTitle>Email Preview</DialogTitle>
         </DialogHeader>
+        {previewContacts.length > 0 && (
+          <Select value={previewContactEmail} onValueChange={updatePreviewContact}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Preview as contact" />
+            </SelectTrigger>
+            <SelectContent>
+              {previewContacts.slice(0, 50).map((contact) => (
+                <SelectItem key={contact.email} value={contact.email}>
+                  {contact.firstName || contact.lastName
+                    ? `${contact.firstName} ${contact.lastName}`.trim() + ` <${contact.email}>`
+                    : contact.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="overflow-auto rounded border bg-muted/30" style={{ height: "60vh" }}>
           <iframe
             ref={previewRef}

@@ -1,7 +1,15 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { db, type EmailList, type Contact, type CustomField } from "@/lib/db"
+import { db, type EmailList, type Contact, type CustomField, type SuppressedEmail } from "@/lib/db"
+import { downloadCsv, parseCSV } from "@/lib/csv"
+import { isValidEmail, normalizeEmail } from "@/lib/email"
+import {
+  listSuppressedEmails,
+  setEmailSubscription,
+  suppressEmail,
+  unsuppressEmail,
+} from "@/lib/repositories/suppression-repository"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -29,52 +37,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus, Sparkles } from "lucide-react"
+import { Plus, Pencil, Trash2, Users, Upload, ArrowLeft, X, Download, UserPlus, Sparkles, UserMinus, UserCheck, Ban } from "lucide-react"
 import { toast } from "sonner"
-import { z } from "zod"
-
-// --- CSV Parser (simple, handles quotes) ---
-function parseCSV(text: string): string[][] {
-  const rows: string[][] = []
-  let current = ""
-  let inQuotes = false
-  let row: string[] = []
-
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i]
-    const next = text[i + 1]
-
-    if (inQuotes) {
-      if (c === '"' && next === '"') {
-        current += '"'
-        i++
-      } else if (c === '"') {
-        inQuotes = false
-      } else {
-        current += c
-      }
-    } else {
-      if (c === '"') {
-        inQuotes = true
-      } else if (c === "," || c === ";") {
-        row.push(current.trim())
-        current = ""
-      } else if (c === "\n" || (c === "\r" && next === "\n")) {
-        row.push(current.trim())
-        if (row.some((cell) => cell.length > 0)) rows.push(row)
-        row = []
-        current = ""
-        if (c === "\r") i++
-      } else {
-        current += c
-      }
-    }
-  }
-  row.push(current.trim())
-  if (row.some((cell) => cell.length > 0)) rows.push(row)
-
-  return rows
-}
 
 // --- List Management Component ---
 export function EmailListSection() {
@@ -119,6 +83,8 @@ export function EmailListSection() {
     existingSkipped: number
     at: Date
   } | null>(null)
+  const [suppressed, setSuppressed] = useState<SuppressedEmail[]>([])
+  const [suppressEmailInput, setSuppressEmailInput] = useState("")
 
   const loadLists = useCallback(async () => {
     const all = await db.emailLists.orderBy("createdAt").reverse().toArray()
@@ -129,6 +95,7 @@ export function EmailListSection() {
       })),
     )
     setLists(withCounts)
+    setSuppressed(await listSuppressedEmails())
   }, [])
 
   const loadContacts = useCallback(async (listId: number) => {
@@ -250,21 +217,29 @@ export function EmailListSection() {
       toast.error("Email is required")
       return
     }
+    const normalizedEmail = normalizeEmail(contactForm.email)
+    if (!isValidEmail(normalizedEmail)) {
+      toast.error("Please enter a valid email address")
+      return
+    }
+
     if (editingContactId) {
-      await db.contacts.update(editingContactId, { ...contactForm })
-      toast.success("Contact updated")
-    } else {
-      const normalizedEmail = contactForm.email.trim().toLowerCase()
-      const isValid = z.string().email().safeParse(normalizedEmail).success
-      if (!isValid) {
-        toast.error("Please enter a valid email address")
-        return
-      }
-      
       const existing = await db.contacts
         .where("listId")
         .equals(selectedList!.id!)
-        .filter((c) => c.email.trim().toLowerCase() === normalizedEmail)
+        .filter((c) => c.email === normalizedEmail && c.id !== editingContactId)
+        .first()
+      if (existing) {
+        toast.error("This email already exists in this list")
+        return
+      }
+      await db.contacts.update(editingContactId, { ...contactForm, email: normalizedEmail })
+      toast.success("Contact updated")
+    } else {
+      const existing = await db.contacts
+        .where("listId")
+        .equals(selectedList!.id!)
+        .filter((c) => c.email === normalizedEmail)
         .first()
       if (existing) {
         toast.error("This email already exists in this list")
@@ -282,6 +257,51 @@ export function EmailListSection() {
     setContactDialogOpen(false)
     loadContacts(selectedList!.id!)
     loadLists()
+  }
+
+  async function handleToggleUnsubscribe(contact: Contact) {
+    await setEmailSubscription(contact.email, !contact.unsubscribed)
+    toast.success(contact.unsubscribed ? "Contact re-subscribed across lists" : "Contact unsubscribed and suppressed")
+    loadContacts(selectedList!.id!)
+    loadLists()
+  }
+
+  function handleExportCsv() {
+    if (!selectedList) return
+    const headers = ["email", "firstName", "lastName", "unsubscribed", ...selectedList.customFields.map((field) => field.name)]
+    const rows = [
+      headers,
+      ...contacts.map((contact) => [
+        contact.email,
+        contact.firstName,
+        contact.lastName,
+        contact.unsubscribed ? "yes" : "no",
+        ...selectedList.customFields.map((field) => contact.customData[field.name] ?? ""),
+      ]),
+    ]
+    downloadCsv(`${selectedList.name.replace(/\s+/g, "-").toLowerCase()}-contacts.csv`, rows)
+    toast.success(`Exported ${contacts.length} contacts`)
+  }
+
+  async function handleAddSuppressed() {
+    if (!isValidEmail(suppressEmailInput)) {
+      toast.error("Please enter a valid email address")
+      return
+    }
+    await suppressEmail(suppressEmailInput, "manual")
+    await setEmailSubscription(suppressEmailInput, true)
+    setSuppressEmailInput("")
+    toast.success("Email added to the global suppression list")
+    loadLists()
+    if (selectedList) loadContacts(selectedList.id!)
+  }
+
+  async function handleRemoveSuppressed(email: string) {
+    await unsuppressEmail(email)
+    await setEmailSubscription(email, false)
+    toast.success("Email removed from suppression")
+    loadLists()
+    if (selectedList) loadContacts(selectedList.id!)
   }
 
   async function handleDeleteContact(id: number) {
@@ -350,10 +370,9 @@ export function EmailListSection() {
 
     for (const row of dataRows) {
       const rawEmail = row[csvMapping.email]?.trim() ?? ""
-      const normalizedEmail = rawEmail.toLowerCase()
-      
-      const isValid = z.string().email().safeParse(normalizedEmail).success
-      if (!isValid) {
+      const normalizedEmail = normalizeEmail(rawEmail)
+
+      if (!isValidEmail(normalizedEmail)) {
         invalid++
         continue
       }
@@ -425,8 +444,8 @@ export function EmailListSection() {
     let duplicatesRemoved = 0
 
     for (const contact of allContacts) {
-      const normalizedEmail = contact.email.trim().toLowerCase()
-      const isValid = z.string().email().safeParse(normalizedEmail).success
+      const normalizedEmail = normalizeEmail(contact.email)
+      const isValid = isValidEmail(normalizedEmail)
 
       if (!isValid) {
         idsToDelete.push(contact.id!)
@@ -577,6 +596,52 @@ export function EmailListSection() {
           </div>
         )}
 
+        <Card>
+          <CardContent className="grid gap-4 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">Global suppression list</CardTitle>
+                <CardDescription>
+                  Suppressed addresses are skipped on every campaign, across all lists. Data stays in this browser.
+                </CardDescription>
+              </div>
+              <Ban className="size-5 text-muted-foreground" />
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                type="email"
+                placeholder="email@example.com"
+                value={suppressEmailInput}
+                onChange={(e) => setSuppressEmailInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void handleAddSuppressed()
+                }}
+              />
+              <Button variant="outline" onClick={() => void handleAddSuppressed()}>
+                Suppress
+              </Button>
+            </div>
+            {suppressed.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No suppressed emails yet.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {suppressed.map((row) => (
+                  <Badge key={row.email} variant="secondary" className="gap-1 pr-1">
+                    {row.email}
+                    <button
+                      onClick={() => void handleRemoveSuppressed(row.email)}
+                      aria-label={`Remove ${row.email} from suppression`}
+                      className="ml-1 rounded-full p-0.5 hover:bg-muted"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Create/Edit List Dialog */}
         <Dialog open={listDialogOpen} onOpenChange={setListDialogOpen}>
           <DialogContent className="sm:max-w-lg">
@@ -713,6 +778,10 @@ export function EmailListSection() {
             </Button>
           </label>
           <input id="csv-upload" type="file" accept=".csv,.txt" className="hidden" onChange={handleFileUpload} />
+          <Button variant="outline" onClick={handleExportCsv} disabled={contacts.length === 0}>
+            <Download className="mr-2 size-4" />
+            Export CSV
+          </Button>
           <Button onClick={openCreateContact}>
             <UserPlus className="mr-2 size-4" />
             Add Contact
@@ -822,6 +891,25 @@ export function EmailListSection() {
                     <TableCell className="text-right">
                       <TooltipProvider>
                         <div className="flex items-center justify-end gap-1">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={contact.unsubscribed ? "Re-subscribe contact" : "Unsubscribe contact"}
+                                onClick={() => handleToggleUnsubscribe(contact)}
+                              >
+                                {contact.unsubscribed ? (
+                                  <UserCheck className="size-4" />
+                                ) : (
+                                  <UserMinus className="size-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {contact.unsubscribed ? "Re-subscribe" : "Unsubscribe"}
+                            </TooltipContent>
+                          </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button

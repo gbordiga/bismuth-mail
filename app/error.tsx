@@ -20,15 +20,15 @@ export default function Error({
       <div className="w-full max-w-xl rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
         <div className="mb-4 flex items-center gap-2 text-destructive">
           <AlertTriangle className="size-5" aria-hidden="true" />
-          <h2 className="text-lg font-semibold">Si e verificato un errore imprevisto</h2>
+          <h2 className="text-lg font-semibold">Something went wrong</h2>
         </div>
         <p className="mb-5 text-sm text-muted-foreground">
-          Puoi riprovare subito. Se il problema persiste, ricarica la pagina o controlla la configurazione SMTP.
+          You can try again now. If the problem persists, reload the page or check your SMTP configuration.
         </p>
         <div className="flex gap-3">
-          <Button onClick={reset}>Riprova</Button>
+          <Button onClick={reset}>Try again</Button>
           <Button type="button" variant="outline" onClick={() => window.location.reload()}>
-            Ricarica pagina
+            Reload page
           </Button>
         </div>
       </div>

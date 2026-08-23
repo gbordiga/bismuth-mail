@@ -30,6 +30,8 @@ import {
 import { Plus, Pencil, Trash2, Mail } from "lucide-react"
 import { toast } from "sonner"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { isValidEmail, normalizeEmail } from "@/lib/email"
+import { useDbQuery } from "@/hooks/use-db-table"
 
 const emptySender: Omit<Sender, "id" | "createdAt"> = {
   name: "",
@@ -41,26 +43,26 @@ const emptySender: Omit<Sender, "id" | "createdAt"> = {
 }
 
 export function SenderSection() {
-  const [senders, setSenders] = useState<Sender[]>([])
-  const [smtpConfigs, setSmtpConfigs] = useState<SmtpConfig[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [form, setForm] = useState(emptySender)
 
-  const load = useCallback(async () => {
+  const loadSetup = useCallback(async () => {
     const [allSenders, allSmtp] = await Promise.all([
       db.senders.orderBy("createdAt").reverse().toArray(),
       db.smtpConfigs.toArray(),
     ])
-    setSenders(allSenders)
-    setSmtpConfigs(allSmtp)
+    return { senders: allSenders, smtpConfigs: allSmtp }
   }, [])
 
+  const { data, reload, error } = useDbQuery(loadSetup, { senders: [] as Sender[], smtpConfigs: [] as SmtpConfig[] })
+  const senders = data.senders
+  const smtpConfigs = data.smtpConfigs
+
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load from IndexedDB
-    void load()
-  }, [load])
+    if (error) toast.error(`Could not load senders: ${error}`)
+  }, [error])
 
   function openCreate() {
     setEditingId(null)
@@ -86,15 +88,29 @@ export function SenderSection() {
       toast.error("Please fill in name, email, unsubscribe email, and select an SMTP server")
       return
     }
+    if (!isValidEmail(form.email) || !isValidEmail(form.unsubscribeEmail)) {
+      toast.error("Sender email and unsubscribe email must be valid")
+      return
+    }
+    if (form.replyTo && !isValidEmail(form.replyTo)) {
+      toast.error("Reply-to email is not valid")
+      return
+    }
+    const payload = {
+      ...form,
+      email: normalizeEmail(form.email),
+      unsubscribeEmail: normalizeEmail(form.unsubscribeEmail),
+      replyTo: form.replyTo ? normalizeEmail(form.replyTo) : "",
+    }
     if (editingId) {
-      await db.senders.update(editingId, { ...form })
+      await db.senders.update(editingId, payload)
       toast.success("Sender updated")
     } else {
-      await db.senders.add({ ...form, createdAt: new Date() })
+      await db.senders.add({ ...payload, createdAt: new Date() })
       toast.success("Sender created")
     }
     setDialogOpen(false)
-    load()
+    void reload()
   }
 
   async function handleDelete(id: number) {
@@ -112,7 +128,7 @@ export function SenderSection() {
     setPendingDeleteId(null)
     await db.senders.delete(id)
     toast.success("Sender deleted")
-    load()
+    void reload()
   }
 
   function getSmtpName(id: number) {

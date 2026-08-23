@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useSending } from "@/lib/sending-context"
 import { ChangelogModal } from "@/components/changelog-modal"
+import { OnboardingGuide } from "@/components/onboarding-guide"
 
 const navItems = [
   { id: "smtp", label: "SMTP Config", href: "/smtp", icon: Server },
@@ -208,7 +209,10 @@ export function AppShell({ children }: AppShellProps) {
             {navItems.find((n) => n.id === activeSection)?.label}
           </h1>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+          <OnboardingGuide />
+          {children}
+        </main>
       </div>
 
       {/* Changelog Modal */}
