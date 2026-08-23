@@ -258,12 +258,12 @@ export function SenderSection() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{editingId ? "Edit" : "New"} Sender</DialogTitle>
             <DialogDescription>Configure the sender identity that recipients will see</DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
+          <div className="grid min-h-0 gap-4 overflow-y-auto py-2">
             <div className="grid gap-1">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Identity</p>
             </div>
@@ -342,12 +342,14 @@ export function SenderSection() {
                 <RichTextEditor
                   value={form.signature}
                   onChange={(html) => setForm({ ...form, signature: html })}
+                  placeholder="Write your signature..."
                   minHeight="120px"
+                  maxHeight="220px"
                 />
               </div>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>

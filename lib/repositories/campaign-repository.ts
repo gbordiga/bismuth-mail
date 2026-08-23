@@ -49,3 +49,36 @@ export async function countUniqueActiveRecipients(listIds: number[]): Promise<nu
   const contacts = await getUniqueActiveContacts(listIds)
   return contacts.length
 }
+
+export async function saveCampaignDraft(input: {
+  id?: number
+  name: string
+  subject: string
+  htmlContent: string
+  senderId: number | null
+  listIds: number[]
+}): Promise<number> {
+  if (input.id != null) {
+    await db.newsletters.update(input.id, {
+      name: input.name,
+      subject: input.subject,
+      htmlContent: input.htmlContent,
+      senderId: input.senderId,
+      listIds: input.listIds,
+    })
+    return input.id
+  }
+
+  const id = await db.newsletters.add({
+    name: input.name,
+    subject: input.subject,
+    htmlContent: input.htmlContent,
+    senderId: input.senderId,
+    listIds: input.listIds,
+    status: "draft",
+    sentAt: null,
+    createdAt: new Date(),
+  })
+  if (id == null) throw new Error("Could not save campaign")
+  return id
+}

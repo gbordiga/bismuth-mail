@@ -131,18 +131,19 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply h-full overflow-hidden bg-background text-foreground antialiased;
   }
 }
 
 @layer components {
   .content-area {
-    @apply flex flex-col gap-6;
+    @apply flex flex-col gap-5;
   }
 
   .section-header {
-    @apply mb-6 flex flex-wrap items-start justify-between gap-3;
+    @apply flex flex-wrap items-start justify-between gap-3;
   }
 
   .section-title {
@@ -175,5 +176,21 @@
 
   .empty-state-description {
     @apply max-w-md text-sm text-muted-foreground;
+  }
+
+  .compact-card {
+    @apply gap-0 py-0 shadow-none;
+  }
+
+  .settings-panel {
+    @apply divide-y overflow-hidden rounded-xl border bg-card;
+  }
+
+  .settings-section {
+    @apply grid gap-3 px-4 py-3.5;
+  }
+
+  .settings-section-title {
+    @apply text-sm font-medium leading-none text-foreground;
   }
 }

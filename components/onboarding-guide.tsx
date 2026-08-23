@@ -1,18 +1,28 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import Link from "next/link"
+import { liveQuery } from "dexie"
 import { db } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { CheckCircle2, Circle, X } from "lucide-react"
 
 const STORAGE_KEY = "bismuth-onboarding-dismissed"
-const REOPEN_EVENT = "bismuth-onboarding-reopen"
+const VISIBILITY_EVENT = "bismuth-onboarding-visibility"
 
 export function reopenOnboarding() {
   window.localStorage.removeItem(STORAGE_KEY)
-  window.dispatchEvent(new Event(REOPEN_EVENT))
+  window.dispatchEvent(new Event(VISIBILITY_EVENT))
+}
+
+function subscribeVisibility(onChange: () => void) {
+  window.addEventListener(VISIBILITY_EVENT, onChange)
+  return () => window.removeEventListener(VISIBILITY_EVENT, onChange)
+}
+
+function getDismissed() {
+  return window.localStorage.getItem(STORAGE_KEY) === "1"
 }
 
 interface SetupProgress {
@@ -23,46 +33,42 @@ interface SetupProgress {
   send: boolean
 }
 
+async function loadSetupProgress(): Promise<SetupProgress> {
+  const [smtpCount, senderCount, listCount, contactCount, campaignCount, sentCount] = await Promise.all([
+    db.smtpConfigs.count(),
+    db.senders.count(),
+    db.emailLists.count(),
+    db.contacts.count(),
+    db.newsletters.count(),
+    db.newsletters.where("status").anyOf("sent", "sent_with_errors").count(),
+  ])
+  return {
+    smtp: smtpCount > 0,
+    sender: senderCount > 0,
+    list: listCount > 0 && contactCount > 0,
+    campaign: campaignCount > 0,
+    send: sentCount > 0,
+  }
+}
+
 export function OnboardingGuide() {
+  const dismissed = useSyncExternalStore(subscribeVisibility, getDismissed, () => true)
   const [progress, setProgress] = useState<SetupProgress | null>(null)
-  const [dismissed, setDismissed] = useState(true)
   const [forced, setForced] = useState(false)
 
-  const load = useCallback(async (opts?: { force?: boolean }) => {
-    if (!opts?.force && typeof window !== "undefined" && window.localStorage.getItem(STORAGE_KEY) === "1") {
-      setDismissed(true)
-      return
-    }
-    setDismissed(false)
-    const [smtpCount, senderCount, listCount, contactCount, campaignCount, sentCount] = await Promise.all([
-      db.smtpConfigs.count(),
-      db.senders.count(),
-      db.emailLists.count(),
-      db.contacts.count(),
-      db.newsletters.count(),
-      db.newsletters.filter((nl) => nl.status === "sent" || nl.status === "sent_with_errors").count(),
-    ])
-    setProgress({
-      smtp: smtpCount > 0,
-      sender: senderCount > 0,
-      list: listCount > 0 && contactCount > 0,
-      campaign: campaignCount > 0,
-      send: sentCount > 0,
-    })
-  }, [])
-
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial IndexedDB + localStorage read
-    void load()
-    const reopen = () => {
-      window.localStorage.removeItem(STORAGE_KEY)
-      setForced(true)
-      setDismissed(false)
-      void load({ force: true })
+    const subscription = liveQuery(loadSetupProgress).subscribe({
+      next: setProgress,
+    })
+    const onVisibility = () => {
+      setForced(!getDismissed())
     }
-    window.addEventListener(REOPEN_EVENT, reopen)
-    return () => window.removeEventListener(REOPEN_EVENT, reopen)
-  }, [load])
+    window.addEventListener(VISIBILITY_EVENT, onVisibility)
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener(VISIBILITY_EVENT, onVisibility)
+    }
+  }, [])
 
   if (dismissed || !progress) return null
 
@@ -95,8 +101,7 @@ export function OnboardingGuide() {
             aria-label="Dismiss setup guide"
             onClick={() => {
               window.localStorage.setItem(STORAGE_KEY, "1")
-              setForced(false)
-              setDismissed(true)
+              window.dispatchEvent(new Event(VISIBILITY_EVENT))
             }}
           >
             <X className="size-4" />

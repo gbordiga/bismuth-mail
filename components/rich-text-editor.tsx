@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import DOMPurify from "isomorphic-dompurify"
+import { sanitizeEditorHtml as purifyEditorHtml } from "@/lib/email-builder"
+import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -124,38 +126,8 @@ function sanitizeLinkHref(rawUrl: string): string | null {
   return null
 }
 
-const EDITOR_ALLOWED_TAGS = [
-  "a",
-  "b",
-  "blockquote",
-  "br",
-  "code",
-  "del",
-  "div",
-  "em",
-  "h1",
-  "h2",
-  "h3",
-  "i",
-  "li",
-  "ol",
-  "p",
-  "pre",
-  "s",
-  "span",
-  "strike",
-  "strong",
-  "u",
-  "ul",
-]
-
 function sanitizeEditorHtml(rawHtml: string): string {
-  const purified = DOMPurify.sanitize(rawHtml, {
-    ALLOWED_TAGS: EDITOR_ALLOWED_TAGS,
-    ALLOWED_ATTR: ["href", "title", "target", "rel"],
-    ALLOW_DATA_ATTR: false,
-    FORBID_ATTR: ["style"],
-  })
+  const purified = purifyEditorHtml(rawHtml)
 
   const parser = new DOMParser()
   const doc = parser.parseFromString(purified, "text/html")
@@ -183,15 +155,39 @@ function setEditorHtml(target: HTMLDivElement, html: string) {
   target.replaceChildren(...Array.from(doc.body.childNodes))
 }
 
+const LEGACY_TEXT_SEED = "Write your text here..."
+
+function editorPlainText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function isEmptyEditorHtml(html: string): boolean {
+  const text = editorPlainText(html)
+  return text.length === 0 || text === LEGACY_TEXT_SEED
+}
+
 export function RichTextEditor({
   value,
   onChange,
+  placeholder = "Write your text here...",
   minHeight = "160px",
+  maxHeight,
+  toolbarEnd,
 }: {
   value: string
   onChange: (html: string) => void
+  placeholder?: string
   minHeight?: string
+  maxHeight?: string
+  toolbarEnd?: ReactNode
 }) {
+  const constrainHeight = Boolean(maxHeight)
   const editableRef = useRef<HTMLDivElement>(null)
   const savedSelectionRef = useRef<Range | null>(null)
   const [mode, setMode] = useState<"visual" | "source" | "html">("visual")
@@ -203,16 +199,19 @@ export function RichTextEditor({
   const [linkUrl, setLinkUrl] = useState("https://")
   const [linkText, setLinkText] = useState("")
 
-  const currentMdSource = hasLocalDraft ? mdSource : htmlToMarkdown(value)
-  const currentHtmlSource = hasLocalDraft ? htmlSource : value
+  const displayValue = isEmptyEditorHtml(value) ? "" : value
+  const currentMdSource = hasLocalDraft ? mdSource : htmlToMarkdown(displayValue)
+  const currentHtmlSource = hasLocalDraft ? htmlSource : displayValue
+  const showPlaceholder = mode === "visual" && isEmptyEditorHtml(hasLocalDraft ? htmlSource : value)
 
   useEffect(() => {
     if (mode !== "visual" || !editableRef.current) return
-    const safeHtml = sanitizeEditorHtml(value)
+    if (document.activeElement === editableRef.current) return
+    const safeHtml = sanitizeEditorHtml(displayValue)
     if (editableRef.current.innerHTML !== safeHtml) {
       setEditorHtml(editableRef.current, safeHtml)
     }
-  }, [mode, value])
+  }, [mode, displayValue])
 
   function saveSelection() {
     const sel = window.getSelection()
@@ -239,7 +238,8 @@ export function RichTextEditor({
 
   function emitChange() {
     const rawHtml = editableRef.current?.innerHTML || ""
-    const html = sanitizeEditorHtml(rawHtml)
+    const html = isEmptyEditorHtml(rawHtml) ? "" : sanitizeEditorHtml(rawHtml)
+    if (html === value && !hasLocalDraft) return
     onChange(html)
     setMdSource(htmlToMarkdown(html))
     setHtmlSource(html)
@@ -311,7 +311,7 @@ export function RichTextEditor({
 
   function switchToVisual() {
     const rawHtml = mode === "html" ? currentHtmlSource : markdownToHtml(currentMdSource)
-    const html = sanitizeEditorHtml(rawHtml)
+    const html = isEmptyEditorHtml(rawHtml) ? "" : sanitizeEditorHtml(rawHtml)
     onChange(html)
     setHtmlSource(html)
     setMdSource(htmlToMarkdown(html))
@@ -334,14 +334,15 @@ export function RichTextEditor({
 
   function handleSourceChange(nextMd: string) {
     setMdSource(nextMd)
-    const html = sanitizeEditorHtml(markdownToHtml(nextMd))
+    const converted = markdownToHtml(nextMd)
+    const html = isEmptyEditorHtml(converted) ? "" : sanitizeEditorHtml(converted)
     setHtmlSource(html)
     setHasLocalDraft(true)
     onChange(html)
   }
 
   function handleHtmlChange(nextHtml: string) {
-    const safeHtml = sanitizeEditorHtml(nextHtml)
+    const safeHtml = isEmptyEditorHtml(nextHtml) ? "" : sanitizeEditorHtml(nextHtml)
     setHtmlSource(nextHtml)
     setMdSource(htmlToMarkdown(safeHtml))
     setHasLocalDraft(true)
@@ -353,7 +354,7 @@ export function RichTextEditor({
 
   return (
     <div className="grid gap-2">
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         {mode === "visual" && (
           <div className="flex flex-wrap items-center gap-0.5 rounded-md border bg-muted/30 p-0.5">
             <TooltipProvider delayDuration={300}>
@@ -457,9 +458,9 @@ export function RichTextEditor({
             </TooltipProvider>
           </div>
         )}
-        <div className="flex-1" />
+        <div className="min-w-0 flex-1" />
         <TooltipProvider delayDuration={300}>
-          <div className="flex items-center gap-0.5 rounded-md border bg-muted/30 p-0.5">
+          <div className="flex shrink-0 items-center gap-0.5 rounded-md border bg-muted/30 p-0.5">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -504,33 +505,54 @@ export function RichTextEditor({
             </Tooltip>
           </div>
         </TooltipProvider>
+        {toolbarEnd}
       </div>
 
       {mode === "visual" ? (
-        <div
-          ref={editableRef}
-          contentEditable
-          suppressContentEditableWarning
-          className="rounded-md border bg-background p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_ul]:ml-4 [&_ul]:list-disc [&_ol]:ml-4 [&_ol]:list-decimal [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mb-1 [&_a]:text-blue-600 [&_a]:underline [&_p]:mb-1"
-          aria-label="Email body editor"
-          style={{ minHeight }}
-          onInput={() => { saveSelection(); emitChange() }}
-          onKeyDown={handleKeyDown}
-          onMouseUp={saveSelection}
-          onKeyUp={saveSelection}
-        />
+        <div className="relative">
+          <div
+            ref={editableRef}
+            contentEditable
+            suppressContentEditableWarning
+            className={cn(
+              "rounded-md border bg-card p-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_ul]:ml-4 [&_ul]:list-disc [&_ol]:ml-4 [&_ol]:list-decimal [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mb-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:mb-1 [&_a]:text-blue-600 [&_a]:underline [&_p]:mb-1 [&_img]:max-w-full [&_img]:h-auto [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1",
+              constrainHeight ? "overflow-y-auto" : "overflow-visible",
+            )}
+            aria-label="Email body editor"
+            aria-placeholder={placeholder}
+            style={{ minHeight, maxHeight }}
+            onInput={() => { saveSelection(); emitChange() }}
+            onKeyDown={handleKeyDown}
+            onMouseUp={saveSelection}
+            onKeyUp={saveSelection}
+          />
+          {showPlaceholder && (
+            <div
+              className="pointer-events-none absolute inset-0 overflow-hidden p-3 text-sm text-muted-foreground"
+              aria-hidden="true"
+            >
+              {placeholder}
+            </div>
+          )}
+        </div>
       ) : mode === "source" ? (
         <Textarea
-          className="bg-background font-mono text-xs"
-          style={{ minHeight }}
+          className={cn(
+            "max-h-none bg-card font-mono text-xs dark:bg-card",
+            constrainHeight ? "field-sizing-fixed resize-none overflow-y-auto" : "field-sizing-content resize-y",
+          )}
+          style={{ minHeight, maxHeight, height: constrainHeight ? maxHeight : undefined }}
           value={currentMdSource}
           onChange={(e) => handleSourceChange(e.target.value)}
           placeholder={"# Heading\n\nWrite **bold**, *italic*, and [links](https://...) in markdown."}
         />
       ) : (
         <Textarea
-          className="bg-background font-mono text-xs"
-          style={{ minHeight }}
+          className={cn(
+            "max-h-none bg-card font-mono text-xs dark:bg-card",
+            constrainHeight ? "field-sizing-fixed resize-none overflow-y-auto" : "field-sizing-content resize-y",
+          )}
+          style={{ minHeight, maxHeight, height: constrainHeight ? maxHeight : undefined }}
           value={currentHtmlSource}
           onChange={(e) => handleHtmlChange(e.target.value)}
           placeholder={"<p>Write raw HTML here...</p>"}

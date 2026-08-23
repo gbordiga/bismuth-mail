@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
+  campaignDraftSnapshot,
+  campaignLeaveAction,
+  canPersistCampaignDraft,
   copyName,
   filterCampaigns,
   filterContacts,
   filterSendLogs,
+  isCampaignDraftDirty,
   isSendReady,
   matchesQuery,
 } from "@/lib/operator"
@@ -71,5 +75,28 @@ describe("isSendReady", () => {
   it("requires every checklist flag", () => {
     expect(isSendReady(ready)).toBe(true)
     expect(isSendReady({ ...ready, hasRecipients: false })).toBe(false)
+  })
+})
+
+describe("campaign draft persistence", () => {
+  const draft = {
+    name: "Welcome",
+    subject: "Hello",
+    senderId: 1,
+    listIds: [2, 3],
+    htmlContent: "[]",
+  }
+
+  it("treats matching snapshots as clean and name/subject as required", () => {
+    expect(isCampaignDraftDirty(draft, campaignDraftSnapshot(draft))).toBe(false)
+    expect(isCampaignDraftDirty({ ...draft, subject: "Changed" }, campaignDraftSnapshot(draft))).toBe(true)
+    expect(canPersistCampaignDraft({ name: "  ", subject: "Hello" })).toBe(false)
+    expect(canPersistCampaignDraft(draft)).toBe(true)
+  })
+
+  it("saves valid dirty drafts on leave and asks to confirm incomplete ones", () => {
+    expect(campaignLeaveAction(false, true)).toBe("close")
+    expect(campaignLeaveAction(true, true)).toBe("save")
+    expect(campaignLeaveAction(true, false)).toBe("confirm")
   })
 })

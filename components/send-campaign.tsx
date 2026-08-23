@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Send, Eye, AlertTriangle, CheckCircle2, XCircle, Clock, Loader2, Mail, ChevronDown, Zap, Wrench, RotateCcw, Download, Search } from "lucide-react"
+import { Send, Eye, AlertTriangle, CheckCircle2, XCircle, Clock, Loader2, Mail, ChevronDown, Zap, Wrench, RotateCcw, Download, Search, Paperclip } from "lucide-react"
 import { toast } from "sonner"
 import { useSending } from "@/lib/sending-context"
 import {
@@ -32,6 +32,8 @@ import {
   loadSendLogsByNewsletter,
 } from "@/lib/repositories/campaign-repository"
 import { campaignStatusLabel, summarizeSendLogs } from "@/lib/send-engine"
+import { collectMailAttachments, listCampaignAttachments } from "@/lib/attachments"
+import { buildFullHtml } from "@/lib/email-builder"
 import { buildCampaignPreviewHtml, buildCampaignPreviewSubject, buildUnsubscribeMailto, parseCampaignBlocks } from "@/lib/preview"
 import { filterCampaigns, filterSendLogs, isSendReady } from "@/lib/operator"
 
@@ -233,13 +235,10 @@ export function SendCampaignSection() {
     const mergeContact = previewContact
       ? { ...previewContact, email: testEmailAddress.trim() }
       : { email: testEmailAddress.trim(), firstName: "John", lastName: "Doe", customData: {} }
-    const html = buildCampaignPreviewHtml({
-      blocks: parseCampaignBlocks(selectedNl.htmlContent),
-      signature: sender.signature,
-      unsubscribeEmail: sender.unsubscribeEmail || sender.email,
-      contact: mergeContact,
-    })
+    const blocks = parseCampaignBlocks(selectedNl.htmlContent)
     const unsubMailto = buildUnsubscribeMailto(sender.unsubscribeEmail || sender.email, testEmailAddress.trim())
+    const html = replaceMergeFields(buildFullHtml(blocks, sender.signature, unsubMailto, false), mergeContact)
+    const attachments = collectMailAttachments(blocks)
 
     try {
       const res = await fetch("/api/smtp/send", {
@@ -260,6 +259,7 @@ export function SendCampaignSection() {
           headers: {
             "List-Unsubscribe": `<${unsubMailto}>`,
           },
+          attachments,
         }),
       })
 
@@ -321,6 +321,7 @@ export function SendCampaignSection() {
 
   const filteredLogs = filterSendLogs(sendLogs, logFilter, logQuery)
   const visibleNewsletters = filterCampaigns(newsletters, campaignQuery, selectedNlId)
+  const selectedAttachments = selectedNl ? listCampaignAttachments(parseCampaignBlocks(selectedNl.htmlContent)) : []
 
   const senderReady = Boolean(selectedNl?.senderId)
   const listsReady = (selectedNl?.listIds.length ?? 0) > 0
@@ -789,6 +790,18 @@ export function SendCampaignSection() {
               <span className="text-muted-foreground">Subject: </span>
               {previewSubject}
             </p>
+          )}
+          {selectedAttachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedAttachments.map((item, index) => (
+                <Badge key={`${item.filename}-${index}`} variant="outline" className="gap-1 font-normal">
+                  <Paperclip className="size-3" />
+                  {item.filename}
+                  {item.sizeLabel ? ` · ${item.sizeLabel}` : ""}
+                  {item.inline ? " · inline" : ""}
+                </Badge>
+              ))}
+            </div>
           )}
           {previewContacts.length > 0 && (
             <div className="grid gap-2">

@@ -57,7 +57,7 @@ export function AppShell({ children }: AppShellProps) {
     : 0
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-full min-h-0 overflow-hidden bg-background">
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 bg-foreground/20 lg:hidden" onClick={() => setMobileOpen(false)} />
@@ -92,7 +92,7 @@ export function AppShell({ children }: AppShellProps) {
             </Tooltip>
           </TooltipProvider>
         </div>
-        <nav className="flex-1 space-y-4 overflow-y-auto p-3">
+        <nav className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto p-3">
           {navGroups.map((group) => (
             <div key={group.label} className="space-y-1.5">
               <p className="px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">{group.label}</p>
@@ -223,7 +223,7 @@ export function AppShell({ children }: AppShellProps) {
             {navItems.find((n) => n.id === activeSection)?.label}
           </h1>
         </header>
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 lg:p-6">
           <OnboardingGuide />
           {children}
         </main>

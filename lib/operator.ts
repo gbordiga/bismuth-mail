@@ -63,3 +63,37 @@ export function isSendReady(flags: {
 }): boolean {
   return flags.senderReady && flags.smtpReady && flags.listsReady && flags.hasRecipients && flags.subjectReady
 }
+
+export type CampaignDraftFields = {
+  name: string
+  subject: string
+  senderId: number | null
+  listIds: number[]
+  htmlContent: string
+}
+
+export function campaignDraftSnapshot(draft: CampaignDraftFields): string {
+  return JSON.stringify({
+    name: draft.name,
+    subject: draft.subject,
+    senderId: draft.senderId,
+    listIds: draft.listIds,
+    htmlContent: draft.htmlContent,
+  })
+}
+
+export function isCampaignDraftDirty(current: CampaignDraftFields, baseline: string): boolean {
+  return campaignDraftSnapshot(current) !== baseline
+}
+
+export function canPersistCampaignDraft(draft: Pick<CampaignDraftFields, "name" | "subject">): boolean {
+  return draft.name.trim().length > 0 && draft.subject.trim().length > 0
+}
+
+export type CampaignLeaveAction = "close" | "save" | "confirm"
+
+export function campaignLeaveAction(isDirty: boolean, canPersist: boolean): CampaignLeaveAction {
+  if (!isDirty) return "close"
+  if (canPersist) return "save"
+  return "confirm"
+}
