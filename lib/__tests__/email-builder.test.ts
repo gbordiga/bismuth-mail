@@ -212,6 +212,12 @@ describe("isEmptyEditorHtml", () => {
   it("keeps ordinary visible text", () => {
     expect(isEmptyEditorHtml("<p>Hello</p>")).toBe(false)
   })
+
+  it("collapses nested empty tags without leftover markup", () => {
+    expect(isEmptyEditorHtml("<script></script>")).toBe(true)
+    expect(isEmptyEditorHtml("<<script></script>")).toBe(true)
+    expect(isEmptyEditorHtml("<<p>></p>")).toBe(true)
+  })
 })
 
 describe("sanitizeEditorHtml", () => {

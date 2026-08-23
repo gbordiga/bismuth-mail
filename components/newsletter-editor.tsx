@@ -52,7 +52,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { RichTextEditor } from "@/components/rich-text-editor"
 
 import { cn } from "@/lib/utils"
-import { type BlockType, type EditorBlock } from "@/lib/email-builder"
+import { type BlockType, type EditorBlock, isEmptyEditorHtml } from "@/lib/email-builder"
 import {
   ATTACHMENT_MAX_BYTES,
   IMAGE_MAX_BYTES,
@@ -83,13 +83,9 @@ function generateId() {
   return Math.random().toString(36).substring(2, 9)
 }
 
-function isLegacyTextSeed(content: string): boolean {
-  return content.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim() === "Write your text here..."
-}
-
 function normalizeBlocks(blocks: EditorBlock[]): EditorBlock[] {
   return blocks.map((block) =>
-    block.type === "text" && isLegacyTextSeed(block.content) ? { ...block, content: "" } : block,
+    block.type === "text" && isEmptyEditorHtml(block.content) ? { ...block, content: "" } : block,
   )
 }
 

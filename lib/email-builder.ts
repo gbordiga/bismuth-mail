@@ -103,13 +103,20 @@ export function sanitizeEditorHtml(html: string): string {
 export const LEGACY_TEXT_SEED = "Write your text here..."
 
 function editorPlainText(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\u00a0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
+  let text = html.replace(/<br\s*\/?>/gi, " ").replace(/&nbsp;/gi, " ")
+
+  // Repeat until stable: a single pass of /<[^>]*>/ can splice leftovers
+  // into a new tag (e.g. "<scr<script>ipt>" → "<script>").
+  let previous: string
+  do {
+    previous = text
+    text = text.replace(/<[^>]*>/g, "")
+  } while (text !== previous)
+
+  // Drop stray brackets from unclosed prefixes such as "<script".
+  text = text.replace(/[<>]/g, "")
+
+  return text.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim()
 }
 
 export function isEmptyEditorHtml(html: string): boolean {
