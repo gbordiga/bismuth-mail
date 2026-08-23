@@ -1,4 +1,27 @@
 versions:
+  - version: 0.4.0
+    date: 2026-08-23
+    changes:
+      - type: added
+        items:
+          - CSV import honors an `unsubscribed` column, skips globally suppressed addresses, and reports those skips
+          - Backup restore snapshots the current IndexedDB first and rolls back if unique-index writes fail
+          - Pre-send checklist, send-log search/filter, contact pagination, and a subscribed/unsubscribed filter
+          - Resolved merge-field subject in campaign preview and test emails, plus `List-Unsubscribe` on test sends
+          - Setup guide can be reopened from the sidebar and now includes a send step
+          - CSV export for the global suppression list
+      - type: changed
+        items:
+          - IndexedDB schema moved to v7 so send-log emails are normalized before the unique recipient index
+          - The send loop keeps an in-memory log map instead of re-reading Dexie after every batch
+          - Restore payload emails are normalized and duplicate send logs are collapsed before insert
+      - type: fixed
+        items:
+          - Mixed-case recipient emails no longer get a second copy on resume
+          - Quotes in image `src`/`alt` and button `href` are escaped in generated HTML
+          - The block editor surface follows the theme instead of forcing a white background
+          - Reset to draft asks for confirmation before clearing send logs
+
   - version: 0.3.0
     date: 2026-08-23
     changes:
