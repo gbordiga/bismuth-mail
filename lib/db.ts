@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from "dexie"
 
 // --- Types ---
-export const DB_SCHEMA_VERSION = 5
+export const DB_SCHEMA_VERSION = 6
 
 export interface SmtpConfig {
   id?: number
@@ -12,7 +12,6 @@ export interface SmtpConfig {
   username: string
   password: string
   delayMs: number
-  batchSize?: number
   maxConnections: number
   createdAt: Date
 }
@@ -59,7 +58,7 @@ export interface Newsletter {
   htmlContent: string
   senderId: number | null
   listIds: number[]
-  status: "draft" | "sending" | "sent"
+  status: "draft" | "sending" | "sent" | "sent_with_errors"
   sentAt: Date | null
   createdAt: Date
 }
@@ -75,6 +74,13 @@ export interface SendLog {
   sentAt: Date | null
 }
 
+export interface SuppressedEmail {
+  id?: number
+  email: string
+  reason: "unsubscribed" | "manual" | "invalid"
+  createdAt: Date
+}
+
 // --- Database ---
 
 const db = new Dexie("NewsletterApp") as Dexie & {
@@ -84,6 +90,7 @@ const db = new Dexie("NewsletterApp") as Dexie & {
   contacts: EntityTable<Contact, "id">
   newsletters: EntityTable<Newsletter, "id">
   sendLogs: EntityTable<SendLog, "id">
+  suppressedEmails: EntityTable<SuppressedEmail, "id">
 }
 
 db.version(1).stores({
@@ -95,67 +102,155 @@ db.version(1).stores({
   sendLogs: "++id, newsletterId, contactEmail, status",
 })
 
-db.version(2).stores({
-  smtpConfigs: "++id, name, createdAt",
-  senders: "++id, name, email, smtpConfigId, createdAt",
-  emailLists: "++id, name, createdAt",
-  contacts: "++id, listId, email, subscribedAt, unsubscribed",
-  newsletters: "++id, name, status, createdAt",
-  sendLogs: "++id, newsletterId, contactEmail, status",
-}).upgrade(tx => {
-  return tx.table("smtpConfigs").toCollection().modify(config => {
-    if (config.delayMs === undefined) config.delayMs = 200
-    if (config.batchSize === undefined) config.batchSize = 10
+db.version(2)
+  .stores({
+    smtpConfigs: "++id, name, createdAt",
+    senders: "++id, name, email, smtpConfigId, createdAt",
+    emailLists: "++id, name, createdAt",
+    contacts: "++id, listId, email, subscribedAt, unsubscribed",
+    newsletters: "++id, name, status, createdAt",
+    sendLogs: "++id, newsletterId, contactEmail, status",
   })
-})
-
-db.version(3).stores({
-  smtpConfigs: "++id, name, createdAt",
-  senders: "++id, name, email, smtpConfigId, createdAt",
-  emailLists: "++id, name, createdAt",
-  contacts: "++id, listId, email, subscribedAt, unsubscribed",
-  newsletters: "++id, name, status, createdAt",
-  sendLogs: "++id, newsletterId, contactEmail, status",
-}).upgrade(tx => {
-  return tx.table("smtpConfigs").toCollection().modify(config => {
-    if (config.maxConnections === undefined) config.maxConnections = 5
-    if (config.batchSize !== undefined && config.batchSize <= 10) config.batchSize = 50
-    if (config.delayMs !== undefined && config.delayMs >= 200) config.delayMs = 0
+  .upgrade((tx) => {
+    return tx
+      .table("smtpConfigs")
+      .toCollection()
+      .modify((config) => {
+        if (config.delayMs === undefined) config.delayMs = 200
+        if (config.batchSize === undefined) config.batchSize = 10
+      })
   })
-})
 
-db.version(4).stores({
-  smtpConfigs: "++id, name, createdAt",
-  senders: "++id, name, email, smtpConfigId, createdAt",
-  emailLists: "++id, name, createdAt",
-  contacts: "++id, listId, email, subscribedAt, unsubscribed",
-  newsletters: "++id, name, status, createdAt",
-  sendLogs: "++id, newsletterId, contactEmail, status",
-}).upgrade(tx => {
-  return tx.table("smtpConfigs").toCollection().modify(config => {
-    delete config.batchSize
+db.version(3)
+  .stores({
+    smtpConfigs: "++id, name, createdAt",
+    senders: "++id, name, email, smtpConfigId, createdAt",
+    emailLists: "++id, name, createdAt",
+    contacts: "++id, listId, email, subscribedAt, unsubscribed",
+    newsletters: "++id, name, status, createdAt",
+    sendLogs: "++id, newsletterId, contactEmail, status",
   })
-})
+  .upgrade((tx) => {
+    return tx
+      .table("smtpConfigs")
+      .toCollection()
+      .modify((config) => {
+        if (config.maxConnections === undefined) config.maxConnections = 5
+        if (config.batchSize !== undefined && config.batchSize <= 10) config.batchSize = 50
+        if (config.delayMs !== undefined && config.delayMs >= 200) config.delayMs = 0
+      })
+  })
 
-db.version(5).stores({
-  smtpConfigs: "++id, name, createdAt",
-  senders: "++id, name, email, smtpConfigId, createdAt",
-  emailLists: "++id, name, createdAt",
-  contacts: "++id, listId, email, subscribedAt, unsubscribed",
-  newsletters: "++id, name, status, createdAt",
-  sendLogs: "++id, newsletterId, contactEmail, status",
-}).upgrade(async tx => {
-  await tx.table("contacts").toCollection().modify(contact => {
-    if (typeof contact.email === "string") {
-      contact.email = contact.email.trim().toLowerCase()
+db.version(4)
+  .stores({
+    smtpConfigs: "++id, name, createdAt",
+    senders: "++id, name, email, smtpConfigId, createdAt",
+    emailLists: "++id, name, createdAt",
+    contacts: "++id, listId, email, subscribedAt, unsubscribed",
+    newsletters: "++id, name, status, createdAt",
+    sendLogs: "++id, newsletterId, contactEmail, status",
+  })
+  .upgrade((tx) => {
+    return tx
+      .table("smtpConfigs")
+      .toCollection()
+      .modify((config) => {
+        delete config.batchSize
+      })
+  })
+
+db.version(5)
+  .stores({
+    smtpConfigs: "++id, name, createdAt",
+    senders: "++id, name, email, smtpConfigId, createdAt",
+    emailLists: "++id, name, createdAt",
+    contacts: "++id, listId, email, subscribedAt, unsubscribed",
+    newsletters: "++id, name, status, createdAt",
+    sendLogs: "++id, newsletterId, contactEmail, status",
+  })
+  .upgrade(async (tx) => {
+    await tx
+      .table("contacts")
+      .toCollection()
+      .modify((contact) => {
+        if (typeof contact.email === "string") {
+          contact.email = contact.email.trim().toLowerCase()
+        }
+      })
+
+    await tx
+      .table("senders")
+      .toCollection()
+      .modify((sender) => {
+        if (!sender.unsubscribeEmail && typeof sender.email === "string") {
+          sender.unsubscribeEmail = sender.email
+        }
+      })
+  })
+
+db.version(6)
+  .stores({
+    smtpConfigs: "++id, name, createdAt",
+    senders: "++id, name, email, smtpConfigId, createdAt",
+    emailLists: "++id, name, createdAt",
+    contacts: "++id, listId, email, subscribedAt, unsubscribed",
+    newsletters: "++id, name, status, createdAt",
+    sendLogs: "++id, newsletterId, [newsletterId+contactEmail], status",
+    suppressedEmails: "++id, &email, createdAt",
+  })
+  .upgrade(async (tx) => {
+    const logs = await tx.table("sendLogs").toArray()
+    const keep = new Map<string, { id: number; status: string; sentAt: Date | null }>()
+    const removeIds: number[] = []
+
+    for (const log of logs) {
+      const key = `${log.newsletterId}::${String(log.contactEmail).trim().toLowerCase()}`
+      const prev = keep.get(key)
+      if (!prev) {
+        keep.set(key, { id: log.id, status: log.status, sentAt: log.sentAt ?? null })
+        continue
+      }
+
+      const preferCurrent =
+        (log.status === "sent" && prev.status !== "sent") ||
+        (log.status === prev.status && (log.id ?? 0) > prev.id)
+
+      if (preferCurrent) {
+        removeIds.push(prev.id)
+        keep.set(key, { id: log.id, status: log.status, sentAt: log.sentAt ?? null })
+      } else {
+        removeIds.push(log.id)
+      }
+    }
+
+    if (removeIds.length > 0) {
+      await tx.table("sendLogs").bulkDelete(removeIds)
+    }
+
+    await tx
+      .table("contacts")
+      .toCollection()
+      .modify((contact) => {
+        if (typeof contact.email === "string") {
+          contact.email = contact.email.trim().toLowerCase()
+        }
+      })
+
+    const allContacts = await tx.table("contacts").toArray()
+    const unsubscribed = allContacts.filter((contact) => Boolean(contact.unsubscribed))
+    const seen = new Set<string>()
+    for (const contact of unsubscribed) {
+      const email = String(contact.email ?? "")
+        .trim()
+        .toLowerCase()
+      if (!email || seen.has(email)) continue
+      seen.add(email)
+      await tx.table("suppressedEmails").add({
+        email,
+        reason: "unsubscribed",
+        createdAt: new Date(),
+      })
     }
   })
-
-  await tx.table("senders").toCollection().modify(sender => {
-    if (!sender.unsubscribeEmail && typeof sender.email === "string") {
-      sender.unsubscribeEmail = sender.email
-    }
-  })
-})
 
 export { db }

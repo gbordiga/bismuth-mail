@@ -66,9 +66,16 @@ describe("blockToHtml", () => {
     expect(html).toContain("3px solid #000")
   })
 
-  it("renders raw html block as-is", () => {
+  it("renders a sanitized html block", () => {
     const raw = "<table><tr><td>Custom</td></tr></table>"
-    expect(blockToHtml(block({ type: "html", content: raw }))).toBe(raw)
+    expect(blockToHtml(block({ type: "html", content: raw }))).toContain("Custom")
+    expect(blockToHtml(block({ type: "html", content: raw }))).toContain("<table>")
+  })
+
+  it("strips script tags from raw html blocks", () => {
+    const html = blockToHtml(block({ type: "html", content: '<p>Safe</p><script>alert(1)</script>' }))
+    expect(html).toContain("Safe")
+    expect(html).not.toContain("<script")
   })
 })
 

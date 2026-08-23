@@ -1,4 +1,14 @@
+import DOMPurify from "isomorphic-dompurify"
+
 export type BlockType = "text" | "image" | "button" | "divider" | "html"
+
+export function sanitizeEmailHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_TAGS: ["style"],
+    ADD_ATTR: ["target", "style"],
+  })
+}
 
 export interface EditorBlock {
   id: string
@@ -22,7 +32,7 @@ export function blockToHtml(block: EditorBlock, preview = false): string {
     case "divider":
       return `<hr style="border: none; border-top: ${block.props.thickness || "1"}px solid ${block.props.color || "#e5e7eb"}; margin: 16px 0;" />`
     case "html":
-      return block.content
+      return sanitizeEmailHtml(block.content)
   }
 }
 
@@ -58,7 +68,7 @@ export function buildFullHtml(
   <div class="email-body">
     ${body}
   </div>
-  ${senderSig ? `<div style="padding: 16px 24px; border-top: 1px solid #e5e7eb;">${senderSig}</div>` : ""}
+  ${senderSig ? `<div style="padding: 16px 24px; border-top: 1px solid #e5e7eb;">${sanitizeEmailHtml(senderSig)}</div>` : ""}
   <div class="email-footer">
     <p>To unsubscribe, <a href="${unsubscribeHref}">click here to send an unsubscribe request</a>.</p>
   </div>

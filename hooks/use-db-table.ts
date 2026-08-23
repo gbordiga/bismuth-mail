@@ -9,8 +9,8 @@ function getErrorMessage(error: unknown): string {
   return "Unknown database error"
 }
 
-export function useDbTable<T>(loader: () => Promise<T[]>) {
-  const [data, setData] = useState<T[]>([])
+export function useDbQuery<T>(loader: () => Promise<T>, initial: T) {
+  const [data, setData] = useState<T>(initial)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,4 +38,8 @@ export function useDbTable<T>(loader: () => Promise<T[]>) {
     error,
     reload,
   }
+}
+
+export function useDbTable<T>(loader: () => Promise<T[]>) {
+  return useDbQuery(loader, [] as T[])
 }

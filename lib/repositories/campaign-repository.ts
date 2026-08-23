@@ -1,4 +1,6 @@
-import { db, type Contact, type EmailList, type Newsletter, type Sender, type SendLog, type SmtpConfig } from "@/lib/db"
+import { db, type Contact, type EmailList, type Newsletter, type Sender, type SmtpConfig } from "@/lib/db"
+import { getSuppressedEmailSet } from "@/lib/repositories/suppression-repository"
+import { loadSendLogsByNewsletter } from "@/lib/repositories/send-log-repository"
 
 export interface SendCampaignData {
   newsletters: Newsletter[]
@@ -6,6 +8,8 @@ export interface SendCampaignData {
   smtpConfigs: SmtpConfig[]
   lists: EmailList[]
 }
+
+export { loadSendLogsByNewsletter }
 
 export async function loadSendCampaignData(): Promise<SendCampaignData> {
   const [newsletters, senders, smtpConfigs, lists] = await Promise.all([
@@ -18,13 +22,10 @@ export async function loadSendCampaignData(): Promise<SendCampaignData> {
   return { newsletters, senders, smtpConfigs, lists }
 }
 
-export async function loadSendLogsByNewsletter(newsletterId: number): Promise<SendLog[]> {
-  return db.sendLogs.where("newsletterId").equals(newsletterId).toArray()
-}
-
 export async function getUniqueActiveContacts(listIds: number[]): Promise<Contact[]> {
   const allContacts: Contact[] = []
   const seenEmails = new Set<string>()
+  const suppressed = await getSuppressedEmailSet()
 
   for (const listId of listIds) {
     const contactsInList = await db.contacts
@@ -35,10 +36,9 @@ export async function getUniqueActiveContacts(listIds: number[]): Promise<Contac
 
     for (const contact of contactsInList) {
       const normalizedEmail = contact.email.trim().toLowerCase()
-      if (!seenEmails.has(normalizedEmail)) {
-        seenEmails.add(normalizedEmail)
-        allContacts.push(contact)
-      }
+      if (seenEmails.has(normalizedEmail) || suppressed.has(normalizedEmail)) continue
+      seenEmails.add(normalizedEmail)
+      allContacts.push(contact)
     }
   }
 
