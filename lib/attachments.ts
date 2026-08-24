@@ -55,9 +55,9 @@ export function imageContentId(blockId: string): string {
 
 export function collectMailAttachments(blocks: CampaignBlock[]): MailAttachment[] {
   const attachments: MailAttachment[] = []
+  let fileCount = 0
 
   for (const block of blocks) {
-    if (attachments.length >= MAX_CAMPAIGN_ATTACHMENTS) break
     const parsed = parseDataUrl(block.content)
     if (!parsed) continue
 
@@ -74,6 +74,8 @@ export function collectMailAttachments(blocks: CampaignBlock[]): MailAttachment[
     }
 
     if (block.type === "attachment") {
+      if (fileCount >= MAX_CAMPAIGN_ATTACHMENTS) continue
+      fileCount += 1
       attachments.push({
         filename: sanitizeFilename(block.props.filename || "attachment"),
         content: parsed.base64,

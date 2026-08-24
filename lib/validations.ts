@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { MAX_CAMPAIGN_ATTACHMENTS } from "@/lib/attachments"
 
 export const SIGNATURE_MAX_CHARS = 5_000_000
 
@@ -39,7 +40,10 @@ export const smtpSendSchema = z.object({
         cid: z.string().max(200).optional(),
       }),
     )
-    .max(20)
+    .refine(
+      (items) => items.filter((item) => !item.cid).length <= MAX_CAMPAIGN_ATTACHMENTS,
+      { message: `You can attach up to ${MAX_CAMPAIGN_ATTACHMENTS} files` },
+    )
     .optional(),
 })
 

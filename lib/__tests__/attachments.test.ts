@@ -4,6 +4,7 @@ import {
   formatFileSize,
   imageContentId,
   listCampaignAttachments,
+  MAX_CAMPAIGN_ATTACHMENTS,
   mergeCampaignBlocks,
   parseDataUrl,
   sanitizeFilename,
@@ -82,6 +83,58 @@ describe("collectMailAttachments", () => {
         contentType: "application/pdf",
       },
     ])
+  })
+
+  it("does not count inline images toward the file attachment cap", () => {
+    const images = Array.from({ length: MAX_CAMPAIGN_ATTACHMENTS }, (_, index) =>
+      block({
+        id: `img-${index}`,
+        type: "image",
+        content: TINY_PNG,
+        props: { filename: `image-${index}.png` },
+      }),
+    )
+    const files = [
+      block({
+        id: "doc",
+        type: "attachment",
+        content: "data:application/pdf;base64,JVBERi0=",
+        props: { filename: "brief.pdf", mimeType: "application/pdf" },
+      }),
+      block({
+        id: "notes",
+        type: "attachment",
+        content: "data:text/plain;base64,YQ==",
+        props: { filename: "notes.txt", mimeType: "text/plain" },
+      }),
+    ]
+
+    const attachments = collectMailAttachments([...images, ...files])
+
+    expect(attachments.filter((item) => item.cid).length).toBe(MAX_CAMPAIGN_ATTACHMENTS)
+    expect(attachments.filter((item) => !item.cid).map((item) => item.filename)).toEqual([
+      "brief.pdf",
+      "notes.txt",
+    ])
+  })
+
+  it("still caps file attachments independently of images", () => {
+    const files = Array.from({ length: MAX_CAMPAIGN_ATTACHMENTS + 1 }, (_, index) =>
+      block({
+        id: `file-${index}`,
+        type: "attachment",
+        content: "data:text/plain;base64,YQ==",
+        props: { filename: `file-${index}.txt`, mimeType: "text/plain" },
+      }),
+    )
+
+    const attachments = collectMailAttachments([
+      block({ id: "hero", type: "image", content: TINY_PNG, props: { filename: "logo.png" } }),
+      ...files,
+    ])
+
+    expect(attachments.filter((item) => item.cid)).toHaveLength(1)
+    expect(attachments.filter((item) => !item.cid)).toHaveLength(MAX_CAMPAIGN_ATTACHMENTS)
   })
 })
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest"
+import { MAX_CAMPAIGN_ATTACHMENTS } from "@/lib/attachments"
 import { SIGNATURE_MAX_CHARS, smtpTestSchema, smtpSendSchema, smtpSendBatchSchema } from "@/lib/validations"
 
 describe("smtpTestSchema", () => {
@@ -86,6 +87,39 @@ describe("smtpSendSchema", () => {
       ],
     })
     expect(result.success).toBe(true)
+  })
+
+  it("does not count CID images toward the file attachment cap", () => {
+    const images = Array.from({ length: MAX_CAMPAIGN_ATTACHMENTS }, (_, index) => ({
+      filename: `image-${index}.png`,
+      content: "abc",
+      encoding: "base64" as const,
+      contentType: "image/png",
+      cid: `img-${index}`,
+    }))
+    const result = smtpSendSchema.safeParse({
+      ...valid,
+      attachments: [
+        ...images,
+        {
+          filename: "brief.pdf",
+          content: "JVBERi0=",
+          encoding: "base64",
+          contentType: "application/pdf",
+        },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it("rejects more file attachments than the campaign limit", () => {
+    const files = Array.from({ length: MAX_CAMPAIGN_ATTACHMENTS + 1 }, (_, index) => ({
+      filename: `file-${index}.txt`,
+      content: "YQ==",
+      encoding: "base64" as const,
+      contentType: "text/plain",
+    }))
+    expect(smtpSendSchema.safeParse({ ...valid, attachments: files }).success).toBe(false)
   })
 })
 
