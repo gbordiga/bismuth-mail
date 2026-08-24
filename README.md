@@ -12,14 +12,17 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 
 ## Features
 
-- **SMTP Configuration** — Add and manage multiple SMTP servers with connection testing, tunable delay, max connections, and duplicate
-- **Sender Profiles** — Create sender identities with custom signatures and reply-to addresses, including duplicate
+- **SMTP Configuration** — Add and manage multiple SMTP servers with connection testing, tunable delay, max connections, and one-click duplicate
+- **Sender Profiles** — Create sender identities with custom signatures and reply-to addresses, including one-click duplicate
 - **Email Lists** — Organize contacts into lists with custom fields, CSV import/export (including unsubscribe flags), duplicate, search, unsubscribe toggles, and a local suppression list
-- **Block Editor** — Compose emails using text, image (URL or upload), button, divider, and raw HTML blocks, plus campaign file attachments, with dark-mode editing and campaign search
+- **Campaign Workspace** — Compose, review, send, and inspect logs in one campaign (`/campaigns/:id/compose|send|logs`), with live sidebar progress, resume, retry-failed, search, filtered log export, pre-send checks, and test emails
+- **Block Editor** — Gmail-style compose window with From, To, and Subject chips; text, image (URL or upload), button, divider, and raw HTML blocks; campaign file attachments; dark-mode editing
 - **Merge Fields** — Use `{{field}}` placeholders in subject and body, resolved per-contact from list custom fields
-- **Campaigns** — Compose, review, send, and inspect logs in one campaign workspace, with live progress, resume, retry-failed, search, filtered log export, pre-send checks, and test emails
-- **Deliverability basics** — `List-Unsubscribe` mailto header, multipart text/plain, sanitized HTML blocks
+- **Deliverability basics** — `List-Unsubscribe` mailto header, multipart text/plain, sanitized HTML blocks, and uploaded images sent as CID inline parts
+- **Send diagnostics** — Failed logs can open, copy, and download the complete API or SMTP error payload
 - **Backup & Restore** — Export and import all data as JSON, with prepared restore counts, snapshot rollback, and automatic reload after a successful restore
+- **Setup Guide** — First-run onboarding checklist that can be reopened from the sidebar
+- **Changelog** — In-app version history from `changelog.yaml`
 - **Dark Mode** — System-aware theme toggle with light and dark modes
 - **Fully Local Storage** — All data persisted in IndexedDB via Dexie; no server-side database needed
 
@@ -39,7 +42,7 @@ A self-hosted email campaign platform built with Next.js. Configure SMTP servers
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) 20 or later
+- [Node.js](https://nodejs.org/) 22 or later
 - [pnpm](https://pnpm.io/) 10+
 
 ### Installation
@@ -67,9 +70,9 @@ pnpm start
 
 ## Quality and CI
 
-- A GitHub Actions CI workflow runs on pushes and pull requests to `main`.
+- A GitHub Actions CI workflow runs on pushes and pull requests to `main`, using Node 22.
 - The workflow runs `pnpm lint`, `tsc --noEmit`, `pnpm test`, and `pnpm build`.
-- SMTP API route contracts are covered by route-level Vitest tests (`send`, `send-batch`, `test`).
+- Vitest covers SMTP route contracts (`send`, `send-batch`, `test`) plus email building, merge fields, attachments, backup, CSV, send engine, and campaign workspace helpers.
 - The repository currently includes CI checks only; deployment (CD) is not defined in this repository.
 
 ## Security Notes (Self-Hosted)
@@ -86,36 +89,43 @@ pnpm start
 ```
 bismuth-mail/
 ├── app/
-│   ├── api/smtp/              # API routes for sending and testing emails
+│   ├── api/
+│   │   ├── changelog/         # Serves structured notes from changelog.yaml
+│   │   └── smtp/              # API routes for sending and testing emails
 │   ├── (dashboard)/           # Route-based app sections
 │   │   ├── smtp/page.tsx
 │   │   ├── senders/page.tsx
 │   │   ├── lists/page.tsx
-│   │   ├── campaigns/           # List plus compose / send / logs workspace
-│   │   ├── editor/page.tsx      # Redirects to /campaigns
-│   │   ├── send/page.tsx        # Redirects to the active campaign or /campaigns
+│   │   ├── campaigns/         # Hub plus /new and /:id/compose|send|logs
+│   │   ├── editor/page.tsx    # Redirects to /campaigns
+│   │   ├── send/page.tsx      # Redirects to the sending campaign or /campaigns
 │   │   └── backup/page.tsx
 │   ├── layout.tsx             # Root layout with theme provider
 │   ├── page.tsx               # Redirects to /smtp
 │   └── globals.css            # Global styles and Tailwind imports
 ├── components/
-│   ├── app-shell.tsx      # Navigation shell with sidebar
-│   ├── smtp-config.tsx    # SMTP server management
-│   ├── sender-section.tsx # Sender profile management
+│   ├── app-shell.tsx          # Navigation shell with sidebar progress
+│   ├── smtp-config.tsx        # SMTP server management
+│   ├── sender-section.tsx     # Sender profile management
 │   ├── email-list-section.tsx # Contact list management
 │   ├── campaign-list.tsx      # Campaign hub
 │   ├── campaign-workspace.tsx # Compose / Send / Logs chrome
 │   ├── newsletter-editor.tsx  # Campaign compose phase
 │   ├── send-campaign.tsx      # Campaign send phase
 │   ├── campaign-send-logs.tsx # Campaign logs phase
-│   ├── backup-section.tsx # Data backup and restore
-│   └── ui/                # Reusable UI primitives (shadcn/ui)
+│   ├── onboarding-guide.tsx   # First-run setup checklist
+│   ├── changelog-modal.tsx    # In-app version history
+│   ├── backup-section.tsx     # Data backup and restore
+│   └── ui/                    # Reusable UI primitives (shadcn/ui)
+├── hooks/                     # Shared client hooks (Dexie tables, changelog)
 └── lib/
-    ├── db.ts              # Dexie database schema and types (IndexedDB only)
-    ├── email-builder.ts   # HTML email template builder
-    ├── send-engine.ts     # Recipient selection and campaign status helpers
-    ├── validations.ts     # Zod schemas for API validation
-    └── utils.ts           # Utility functions
+    ├── db.ts                  # Dexie database schema and types (IndexedDB only)
+    ├── email-builder.ts       # HTML email template builder
+    ├── send-engine.ts         # Recipient selection and campaign status helpers
+    ├── sending-context.tsx    # Live send progress across the app
+    ├── repositories/          # Campaign, send-log, and suppression queries
+    ├── validations.ts         # Zod schemas for API validation
+    └── __tests__/             # Vitest coverage for routes and helpers
 ```
 
 ## How It Works
@@ -125,7 +135,7 @@ bismuth-mail/
 3. **Build** email lists and add contacts manually or via CSV import
 4. **Compose and send** a campaign in one workspace: write the email, review the checklist, send, then inspect logs
 
-All data stays in your browser's IndexedDB. Use the Backup section to export/import your data as JSON.
+A setup guide in the sidebar walks through these steps on first run. All data stays in your browser's IndexedDB. Use the Backup section to export/import your data as JSON.
 
 ## Changelog
 
