@@ -28,8 +28,23 @@ export function useDbQuery<T>(loader: () => Promise<T>, initial: T) {
   }, [loader])
 
   useEffect(() => {
-    void reload()
-  }, [reload])
+    let cancelled = false
+    void loader()
+      .then((rows) => {
+        if (cancelled) return
+        setData(rows)
+        setError(null)
+        setLoading(false)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setError(getErrorMessage(err))
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loader])
 
   return {
     data,

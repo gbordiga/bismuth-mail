@@ -25,8 +25,28 @@ export function useChangelog() {
   }, [])
 
   useEffect(() => {
-    void reload()
-  }, [reload])
+    let cancelled = false
+    void fetch("/api/changelog", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to load changelog")
+        return (await res.json()) as ChangelogData
+      })
+      .then((data) => {
+        if (cancelled) return
+        setVersions(data.versions)
+        setError(null)
+        setHasFetched(true)
+      })
+      .catch((err: unknown) => {
+        console.error("Error loading changelog:", err)
+        if (cancelled) return
+        setError("Failed to load changelog")
+        setHasFetched(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return {
     versions,

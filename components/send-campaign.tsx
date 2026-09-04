@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -71,44 +71,48 @@ export function CampaignSend({ campaignId }: { campaignId: number }) {
   const { sending, phase, activeNewsletterId, sendProgress, sendSpeed, startSend, abortSend } = useSending()
   const isThisCampaignSending = sending && activeNewsletterId === campaignId
 
-  const load = useCallback(async () => {
-    const [campaign, nextSenders, nextSmtp, nextLists] = await Promise.all([
+  useEffect(() => {
+    let cancelled = false
+    void Promise.all([
       db.newsletters.get(campaignId),
       db.senders.toArray(),
       db.smtpConfigs.toArray(),
       db.emailLists.toArray(),
-    ])
-    setNewsletter(campaign ?? null)
-    setSenders(nextSenders)
-    setSmtpConfigs(nextSmtp)
-    setLists(nextLists)
-    setLoaded(true)
-  }, [campaignId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  useEffect(() => {
-    if (!sending) void load()
-  }, [sending, load])
+    ]).then(([campaign, nextSenders, nextSmtp, nextLists]) => {
+      if (cancelled) return
+      setNewsletter(campaign ?? null)
+      setSenders(nextSenders)
+      setSmtpConfigs(nextSmtp)
+      setLists(nextLists)
+      setLoaded(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [campaignId, sending])
 
   useEffect(() => {
     void loadSendLogsByNewsletter(campaignId).then(setSendLogs)
   }, [campaignId, sendProgress])
 
+  const listKey = newsletter?.listIds.join(",") ?? ""
+
   useEffect(() => {
-    if (!newsletter) {
-      setRecipientCount(0)
-      setPreviewContacts([])
-      return
-    }
-    void countUniqueActiveRecipients(newsletter.listIds).then(setRecipientCount)
-    void getUniqueActiveContacts(newsletter.listIds).then((contacts) => {
+    if (!newsletter) return
+    let cancelled = false
+    void Promise.all([
+      countUniqueActiveRecipients(newsletter.listIds),
+      getUniqueActiveContacts(newsletter.listIds),
+    ]).then(([count, contacts]) => {
+      if (cancelled) return
+      setRecipientCount(count)
       setPreviewContacts(contacts)
       setPreviewContactEmail((current) => current || contacts[0]?.email || "")
     })
-  }, [newsletter])
+    return () => {
+      cancelled = true
+    }
+  }, [newsletter, listKey])
 
   function renderPreview(contactEmail?: string) {
     if (!newsletter) return
