@@ -89,6 +89,15 @@ function normalizeBlocks(blocks: EditorBlock[]): EditorBlock[] {
   )
 }
 
+function blocksFromNewsletter(newsletter: Newsletter | null): EditorBlock[] {
+  if (!newsletter) return [createBlock("text")]
+  try {
+    return normalizeBlocks(JSON.parse(newsletter.htmlContent))
+  } catch {
+    return [{ id: generateId(), type: "html", content: newsletter.htmlContent, props: {} }]
+  }
+}
+
 function createBlock(type: BlockType): EditorBlock {
   switch (type) {
     case "text":
@@ -809,41 +818,6 @@ function CampaignAttachments({
 
 export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
   const router = useRouter()
-  const [ready, setReady] = useState(false)
-  const [editing, setEditing] = useState<Newsletter | null>(null)
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const [name, setName] = useState("")
-  const [subject, setSubject] = useState("")
-  const [senderId, setSenderId] = useState<number | null>(null)
-  const [selectedListIds, setSelectedListIds] = useState<number[]>([])
-  const [blocks, setBlocks] = useState<EditorBlock[]>([])
-  const [previewHtml, setPreviewHtml] = useState("")
-  const [previewSubject, setPreviewSubject] = useState("")
-  const [previewContacts, setPreviewContacts] = useState<Contact[]>([])
-  const [previewContactEmail, setPreviewContactEmail] = useState("")
-  const [saveStatus, setSaveStatus] = useState<"clean" | "dirty" | "saving" | "saved">("clean")
-  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
-  const [listCounts, setListCounts] = useState<Record<number, number>>({})
-  const [recipientCount, setRecipientCount] = useState(0)
-  const previewRef = useRef<HTMLIFrameElement>(null)
-  const baselineRef = useRef("")
-  const editingIdRef = useRef<number | null>(null)
-  const persistLockRef = useRef(Promise.resolve())
-  const leaveResolveRef = useRef<((value: boolean) => void) | null>(null)
-  const persistDraftRef = useRef<(options?: { silent?: boolean }) => Promise<boolean>>(async () => false)
-  const hydratedKeyRef = useRef<string | null>(null)
-  const draftRef = useRef({
-    active: false,
-    persistInFlight: false,
-    editingId: null as number | null,
-    baseline: "",
-    name: "",
-    subject: "",
-    senderId: null as number | null,
-    listIds: [] as number[],
-    htmlContent: "[]",
-  })
-
   const loadComposeData = useCallback(async () => {
     const [senders, lists, newsletter] = await Promise.all([
       db.senders.toArray(),
@@ -858,68 +832,89 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
     lists: [] as EmailList[],
     newsletter: null as Newsletter | null,
   })
-  const senders = data.senders
-  const lists = data.lists
-  const newsletter = data.newsletter
-  const readOnly = editing != null && editing.status !== "draft"
 
   useEffect(() => {
     if (error) toast.error(`Could not load campaign: ${error}`)
   }, [error])
 
   useEffect(() => {
-    if (loading) return
-    if (campaignId != null && !newsletter) {
+    if (!loading && campaignId != null && !data.newsletter) {
       toast.error("Campaign not found")
       router.replace("/campaigns")
-      return
     }
+  }, [loading, campaignId, data.newsletter, router])
 
-    if (newsletter) {
-      let nextBlocks: EditorBlock[]
-      try {
-        nextBlocks = normalizeBlocks(JSON.parse(newsletter.htmlContent))
-      } catch {
-        nextBlocks = [{ id: generateId(), type: "html", content: newsletter.htmlContent, props: {} }]
-      }
-      setEditing(newsletter)
-      setName(newsletter.name)
-      setSubject(newsletter.subject)
-      setSenderId(newsletter.senderId)
-      setSelectedListIds(newsletter.listIds)
-      setBlocks(nextBlocks)
-      rememberOpenedDraft(
-        {
-          name: newsletter.name,
-          subject: newsletter.subject,
-          senderId: newsletter.senderId,
-          listIds: newsletter.listIds,
-          htmlContent: JSON.stringify(nextBlocks),
-        },
-        newsletter,
-      )
-    } else {
-      const initialBlocks = [createBlock("text")]
-      const nextSenderId = senders[0]?.id ?? null
-      setEditing(null)
-      setName("")
-      setSubject("")
-      setSenderId(nextSenderId)
-      setSelectedListIds([])
-      setBlocks(initialBlocks)
-      rememberOpenedDraft(
-        {
-          name: "",
-          subject: "",
-          senderId: nextSenderId,
-          listIds: [],
-          htmlContent: JSON.stringify(initialBlocks),
-        },
-        null,
-      )
-    }
-    setReady(true)
-  }, [loading, campaignId, newsletter, router, senders])
+  if (loading || (campaignId != null && !data.newsletter)) {
+    return <p className="text-sm text-muted-foreground">Loading campaign…</p>
+  }
+
+  return (
+    <CampaignComposeForm
+      key={campaignId ?? "new"}
+      campaignId={campaignId}
+      newsletter={data.newsletter}
+      senders={data.senders}
+      lists={data.lists}
+    />
+  )
+}
+
+function CampaignComposeForm({
+  campaignId,
+  newsletter,
+  senders,
+  lists,
+}: {
+  campaignId: number | null
+  newsletter: Newsletter | null
+  senders: Sender[]
+  lists: EmailList[]
+}) {
+  const router = useRouter()
+  const initialBlocks = blocksFromNewsletter(newsletter)
+  const initialName = newsletter?.name ?? ""
+  const initialSubject = newsletter?.subject ?? ""
+  const initialSenderId = newsletter?.senderId ?? senders[0]?.id ?? null
+  const initialListIds = newsletter?.listIds ?? []
+  const initialDraft: CampaignDraftFields = {
+    name: initialName,
+    subject: initialSubject,
+    senderId: initialSenderId,
+    listIds: initialListIds,
+    htmlContent: JSON.stringify(initialBlocks),
+  }
+  const initialBaseline = campaignDraftSnapshot(initialDraft)
+
+  const [editing, setEditing] = useState<Newsletter | null>(newsletter)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [name, setName] = useState(initialName)
+  const [subject, setSubject] = useState(initialSubject)
+  const [senderId, setSenderId] = useState<number | null>(initialSenderId)
+  const [selectedListIds, setSelectedListIds] = useState<number[]>(initialListIds)
+  const [blocks, setBlocks] = useState<EditorBlock[]>(initialBlocks)
+  const [previewHtml, setPreviewHtml] = useState("")
+  const [previewSubject, setPreviewSubject] = useState("")
+  const [previewContacts, setPreviewContacts] = useState<Contact[]>([])
+  const [previewContactEmail, setPreviewContactEmail] = useState("")
+  const [saveStatus, setSaveStatus] = useState<"clean" | "dirty" | "saving" | "saved">("clean")
+  const [baseline, setBaseline] = useState(initialBaseline)
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
+  const [listCounts, setListCounts] = useState<Record<number, number>>({})
+  const [recipientCount, setRecipientCount] = useState(0)
+  const previewRef = useRef<HTMLIFrameElement>(null)
+  const baselineRef = useRef(initialBaseline)
+  const editingIdRef = useRef<number | null>(newsletter?.id ?? null)
+  const persistLockRef = useRef(Promise.resolve())
+  const leaveResolveRef = useRef<((value: boolean) => void) | null>(null)
+  const persistDraftRef = useRef<(options?: { silent?: boolean }) => Promise<boolean>>(async () => false)
+  const draftRef = useRef({
+    active: newsletter == null || newsletter.status === "draft",
+    persistInFlight: false,
+    editingId: newsletter?.id ?? null,
+    baseline: initialBaseline,
+    ...initialDraft,
+  })
+  const readOnly = editing != null && editing.status !== "draft"
 
   useEffect(() => {
     let cancelled = false
@@ -942,10 +937,7 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
   }, [lists])
 
   useEffect(() => {
-    if (selectedListIds.length === 0) {
-      setRecipientCount(0)
-      return
-    }
+    if (selectedListIds.length === 0) return
     let cancelled = false
     void countUniqueActiveRecipients(selectedListIds).then((count) => {
       if (!cancelled) setRecipientCount(count)
@@ -954,6 +946,8 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
       cancelled = true
     }
   }, [selectedListIds])
+
+  const visibleRecipientCount = selectedListIds.length === 0 ? 0 : recipientCount
 
   const mergeFields = (() => {
     const base = ["email", "firstName", "lastName"]
@@ -973,22 +967,6 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
       listIds: selectedListIds,
       htmlContent: JSON.stringify(nextBlocks),
     }
-  }
-
-  function rememberOpenedDraft(draft: CampaignDraftFields, nextNewsletter: Newsletter | null) {
-    const snapshot = campaignDraftSnapshot(draft)
-    baselineRef.current = snapshot
-    editingIdRef.current = nextNewsletter?.id ?? null
-    setSaveStatus("clean")
-    setLeaveConfirmOpen(false)
-  }
-
-  draftRef.current = {
-    active: ready && !readOnly,
-    persistInFlight: draftRef.current.persistInFlight,
-    editingId: editingIdRef.current,
-    baseline: baselineRef.current,
-    ...currentDraft(),
   }
 
   async function persistDraft(options?: { silent?: boolean }): Promise<boolean> {
@@ -1037,8 +1015,10 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
         })
         router.replace(campaignPhasePath(id, "compose"))
       }
-      baselineRef.current = campaignDraftSnapshot(draft)
-      draftRef.current = { ...draftRef.current, editingId: id, baseline: baselineRef.current }
+      const snapshot = campaignDraftSnapshot(draft)
+      baselineRef.current = snapshot
+      setBaseline(snapshot)
+      draftRef.current = { ...draftRef.current, editingId: id, baseline: snapshot }
       setSaveStatus("saved")
       if (!options?.silent) toast.success(wasNew ? "Campaign created" : "Campaign updated")
       return true
@@ -1052,10 +1032,19 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
     }
   }
 
-  persistDraftRef.current = persistDraft
+  useEffect(() => {
+    draftRef.current = {
+      active: !readOnly,
+      persistInFlight: draftRef.current.persistInFlight,
+      editingId: editingIdRef.current,
+      baseline: baselineRef.current,
+      ...currentDraft(),
+    }
+    persistDraftRef.current = persistDraft
+  })
 
   useCampaignLeaveGuard(async () => {
-    if (!ready || readOnly) return true
+    if (readOnly) return true
     const draft = currentDraft()
     const action = campaignLeaveAction(
       isCampaignDraftDirty(draft, baselineRef.current),
@@ -1071,7 +1060,7 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
   })
 
   useEffect(() => {
-    if (!ready || readOnly) return
+    if (readOnly) return
     const draft: CampaignDraftFields = {
       name,
       subject,
@@ -1079,14 +1068,13 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
       listIds: selectedListIds,
       htmlContent: JSON.stringify(blocks),
     }
-    if (!isCampaignDraftDirty(draft, baselineRef.current)) return
-    setSaveStatus("dirty")
+    if (!isCampaignDraftDirty(draft, baseline)) return
     if (!canPersistCampaignDraft(draft)) return
     const timer = window.setTimeout(() => {
       void persistDraftRef.current({ silent: true })
     }, 700)
     return () => window.clearTimeout(timer)
-  }, [ready, readOnly, name, subject, senderId, selectedListIds, blocks])
+  }, [readOnly, name, subject, senderId, selectedListIds, blocks, baseline])
 
   useEffect(() => {
     return () => {
@@ -1105,7 +1093,7 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
   }, [])
 
   useEffect(() => {
-    if (!ready || readOnly) return
+    if (readOnly) return
     function onBeforeUnload(event: BeforeUnloadEvent) {
       const draft = draftRef.current
       if (!isCampaignDraftDirty(draft, draft.baseline)) return
@@ -1114,7 +1102,7 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
     }
     window.addEventListener("beforeunload", onBeforeUnload)
     return () => window.removeEventListener("beforeunload", onBeforeUnload)
-  }, [ready, readOnly, name, subject, senderId, selectedListIds, blocks])
+  }, [readOnly, name, subject, senderId, selectedListIds, blocks])
 
   async function handleReviewAndSend() {
     const ok = await persistDraft()
@@ -1222,18 +1210,9 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
     </Dialog>
   )
 
+  const isDirty = isCampaignDraftDirty(currentDraft(), baseline)
   const saveStatusLabel =
-    saveStatus === "saving"
-      ? "Saving…"
-      : saveStatus === "saved"
-        ? "Saved"
-        : saveStatus === "dirty"
-          ? "Unsaved changes"
-          : null
-
-  if (!ready) {
-    return <p className="text-sm text-muted-foreground">Loading campaign…</p>
-  }
+    saveStatus === "saving" ? "Saving…" : isDirty ? "Unsaved changes" : saveStatus === "saved" ? "Saved" : null
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
@@ -1297,7 +1276,7 @@ export function CampaignCompose({ campaignId }: { campaignId: number | null }) {
             selectedListIds={selectedListIds}
             onToggle={toggleListSelection}
             listCounts={listCounts}
-            recipientCount={recipientCount}
+            recipientCount={visibleRecipientCount}
           />
         </ComposeRow>
         <ComposeRow label="Subject" htmlFor="nl-subject">
