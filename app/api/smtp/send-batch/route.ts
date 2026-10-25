@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer"
+import nodemailer, { type Transporter } from "nodemailer"
 import { smtpSendBatchSchema } from "@/lib/validations"
 import { collectMailAttachments } from "@/lib/attachments"
 import { buildFullHtml, type EditorBlock } from "@/lib/email-builder"
@@ -43,7 +43,7 @@ type SendResult = {
 }
 
 async function sendWithRetry(
-  transporter: nodemailer.Transporter,
+  transporter: Transporter,
   mail: {
     from: string
     replyTo: string
@@ -89,7 +89,7 @@ async function processBatchWithWorkerPool(args: {
   blocks: EditorBlock[]
   signature: string
   unsubscribeEmail: string
-  transporter: nodemailer.Transporter
+  transporter: Transporter
   maxRetries: number
   fromHeader: string
   replyToHeader: string
@@ -158,7 +158,7 @@ async function processBatchWithWorkerPool(args: {
 }
 
 export async function POST(req: Request) {
-  let transporter: nodemailer.Transporter | null = null
+  let transporter: Transporter | null = null
 
   try {
     const body = await req.json()
